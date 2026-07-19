@@ -18,7 +18,13 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 module purge
-module load StdEnv/2023 python/3.11 scipy-stack/2024a cuda/12.2
+# Verified 2026-07-19 via 'module spider python/3.11.5' and 'module spider cuda/12.6'
+# on Rorqual (both required StdEnv/2023; cuda additionally needs a compiler --
+# gcc/13.3 picked arbitrarily among the non-MPI options since this job is
+# single-process (no MPI code anywhere in this project) and only consumes
+# prebuilt wheels via pip, never compiles anything itself -- any of the listed
+# non-openmpi compiler choices should work equally.
+module load StdEnv/2023 gcc/13.3 cuda/12.6 python/3.11.5
 
 # Job-local virtualenv from the cluster's own prebuilt wheels, not conda --
 # Alliance Canada's guidance is to avoid conda on the shared filesystem (its
