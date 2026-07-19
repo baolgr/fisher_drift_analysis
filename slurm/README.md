@@ -209,6 +209,37 @@ After they land, `python scripts/compare_runs.py` picks up every new run directl
 ViT sweep (`runs/sweep_summaries/vit_lambda_metric_sweep.png`) -- rerun it with the ResNet50 dirs
 once this batch completes for the ResNet50 equivalent.
 
+## Re-running the most interesting existing runs to pick up the new plots
+
+The 7 runs completed before 2026-07-19 can't be regenerated in place (no raw history was
+persisted, see the "Plotting changes" section below) -- the only way to get the new freeze-step
+marker / accuracy overlay / `history.json` for them is to re-run training. Re-launching the
+**existing, unmodified** scripts below with their original run names (no `run_name` override, no
+new files) will **overwrite** `runs/vit_small_nofreeze/`, `runs/vit_small_freeze/`,
+`runs/vit_small_freeze_fix_lambda13/`, `runs/vit_small_freeze_fix_meanjs/`,
+`runs/resnet50_nofreeze/`, and `runs/resnet50_freeze/` with a fresh run of the identical config
+(same seed=0, so results should reproduce closely, modulo hardware nondeterminism) --
+intentional, not a new naming scheme:
+
+```bash
+sbatch slurm/train_vit_nofreeze.sh
+sbatch slurm/train_vit_freeze.sh
+sbatch slurm/train_vit_freeze_fix_lambda13.sh
+sbatch slurm/train_vit_freeze_fix_meanjs.sh
+sbatch slurm/train_resnet_nofreeze.sh
+sbatch slurm/train_resnet_freeze.sh
+```
+
+`vit_small_freeze_fix_lambda16` is deliberately **not** in this list: the 5-experiments report
+itself judges it the least interesting of the 4 fix configs (same accuracy as `lambda13` at a
+fraction of the params frozen — "ne représente pas un résultat intéressant", report §6 point 2).
+Re-run it too with `sbatch slurm/train_vit_freeze_fix_lambda16.sh` if you want it regenerated
+anyway. Note this overwrites runs already cited by exact numbers in
+`docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md` and
+`docs/2026-07-19_resnet50_cluster_run_curve_analysis.md` -- fine if you intend those reports to be
+superseded by the re-run's numbers, worth a second look if you want the exact cited figures to
+stay reproducible from disk.
+
 ## Plotting changes that apply automatically to every run in this batch
 
 `src/utils/plotting.py`'s `plot_metric_evolution` now takes two new optional args, both wired up
