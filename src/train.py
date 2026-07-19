@@ -8,6 +8,7 @@ benchmark (ResNet50 and ViT-small share one script -- see plan for why).
 """
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -162,7 +163,44 @@ def parse_args():
     return parser.parse_args()
 
 
+class _Tee:
+    """Duplicates writes to multiple streams -- lets train.log capture the same
+    stdout/stderr a terminal/nohup would see, without losing the live console
+    output people already rely on when following a run with tail -f.
+    """
+
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for stream in self._streams:
+            stream.write(data)
+
+    def flush(self):
+        for stream in self._streams:
+            stream.flush()
+
+
 def run_training(model_name: str, cfg: Dict, disable_freeze: bool = False) -> Dict:
+    # Opened first (before any print/log line, including trainer/Fisher setup)
+    # so train.log always lands beside summary.json/metrics_plots/ for this
+    # run, instead of relying on someone manually redirecting nohup and
+    # renaming the file afterward.
+    # run_name is an optional config override (default: model_freeze/nofreeze) --
+    # lets several freeze-config variants of the same model run to distinct,
+    # flat runs/<run_name>/ directories (needed so parallel SLURM jobs don't
+    # collide on the same output_dir mid-training, and so scripts/compare_runs.py's
+    # one-level runs/*/summary.json glob picks all of them up directly).
+    default_run_name = f"{model_name}_{'nofreeze' if disable_freeze else 'freeze'}"
+    output_dir = Path(cfg.get("output_dir", ".")) / cfg.get("run_name", default_run_name)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "train.log", "w") as log_file, contextlib.redirect_stdout(
+        _Tee(sys.stdout, log_file)
+    ), contextlib.redirect_stderr(_Tee(sys.stderr, log_file)):
+        return _run_training(model_name, cfg, disable_freeze, output_dir)
+
+
+def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: Path) -> Dict:
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif torch.backends.mps.is_available():
@@ -198,9 +236,6 @@ def run_training(model_name: str, cfg: Dict, disable_freeze: bool = False) -> Di
     freeze_interval = cfg.get("freeze_interval", 300)
     if disable_freeze:
         freeze_interval = num_epochs * steps_per_epoch + 1
-
-    output_dir = Path(cfg.get("output_dir", ".")) / f"{model_name}_{'nofreeze' if disable_freeze else 'freeze'}"
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     trainer = FisherAdapTuneTrainer(
         model=model,

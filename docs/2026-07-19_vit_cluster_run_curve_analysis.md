@@ -138,3 +138,62 @@ Note annexe, non traitée ici : par convention (`CLAUDE.md`), `runs/vit_small_fr
 `runs/vit_small_nofreeze/` sont les dossiers de sortie par défaut (non versionnés) — à
 renommer vers un nom explicite (style `runs/vit_small_freeze_cluster40ep_v1/`) si ce résultat
 doit être conservé, avant qu'un futur run à ces mêmes chemins ne l'écrase.
+
+## 6. Addendum (récupération du vrai log cluster) — le §3/§5 sont expliqués, pas juste constatés
+
+Le stdout réel du job SLURM (`slurm/logs/vit_freeze-16724978.out`, récupéré après coup —
+`train.py` ne sauvegardait pas encore `train.log` au moment de ce run) donne la ligne
+`_apply_variance_freeze` qui manquait :
+
+```
+[Freeze] Step 7200: variation mean=0.5744 std=0.2527 λ=-1.000 threshold=0.3217 | frozen=127 remaining=281
+[Freeze] Step 7200: trainable tensors=59 chunks=281 params=245,818
+```
+
+**Le chiffre clé, invisible dans les PNG** : au niveau des *chunks*, seuls 127/408 (31 %) sont
+gelés, 281/408 (69 %) survivent — un gel qui semble presque équilibré. Mais au niveau des
+*paramètres*, les 245 818 params qui survivent (9,2 % de 2 680 906) donnent une taille moyenne
+de ~875 éléments par chunk survivant, contre ~19 175 éléments par chunk gelé — un **facteur
+~22×**. Le gel n'a donc pas coupé "un peu partout" ; il a systématiquement gelé les *gros*
+chunks (blocs de lignes de grandes matrices de poids — attn.qkv/mlp.fc1/fc2, cohérent avec §2)
+et épargné les *petits* (biais, affines LayerNorm, ~192 éléments ou moins) — exactement le
+biais déjà documenté en mémoire (`fisheradaptune_freeze_collapse_bug` : les petits tenseurs
+produisent des histogrammes JS-distance à 64 bins beaucoup plus bruités sur peu d'éléments,
+donc un score de dérive artificiellement gonflé par le bruit d'échantillonnage plutôt que par
+un vrai signal). Ce mémo documentait ce biais pour l'ancienne config buggée
+(`lambda=1.0`) où il causait l'effondrement inverse (les petits tenseurs bruités passaient
+*au-dessus* du seuil et survivaient seuls) ; ici, avec `lambda=-1.0` (seuil bas, censé garder
+la quasi-totalité), le même biais gonfle `mean`/`std` via les petits chunks bruités, ce qui
+repousse par ricochet les gros chunks — dont le score `total_variation` réel a en grande partie
+cessé de croître une fois saturé près du plafond ~0.83 vu au heatmap (§4) — sous le seuil
+`mean - std`. C'est une lecture cohérente, mais reste une hypothèse mécanistique, pas une preuve
+directe (pas de dump par-chunk des scores individuels dans ce log) — même prudence que pour le
+reste du document.
+
+Ça répond directement à la question ouverte du §3/§5 ("pourquoi 91 % de params coupés au lieu
+de ~51 %") : ce n'est pas un dérèglement aléatoire, c'est le même biais petit-tenseur déjà connu,
+mais amplifié par l'horizon plus long (36 mises à jour EMA avant la coupe, contre ~16 à
+18 epochs) qui laisse plus de temps au bruit cumulatif des petits chunks de gonfler `total_variation`
+(une somme de deltas absolus n'annule jamais le bruit, elle l'accumule) pendant que les gros
+chunks, eux, plafonnent en `total_variation` réel une fois leur dérive saturée.
+
+**Conséquence pour la discussion lambda/interval déjà eue** : ça renforce nettement l'idée
+"passer `chunk_selection_metric` à `mean_js`" déjà évoquée comme piste secondaire — `mean_js`
+est une *moyenne* de lectures JS (`js_sum/js_count`), qui ne grossit pas avec le nombre de
+mises à jour EMA observées, contrairement à `total_variation` qui est une somme cumulée. Ça
+n'élimine pas le bruit d'échantillonnage propre aux petits tenseurs (biais séparé, documenté
+lui aussi en mémoire), mais ça retire le second facteur — la durée d'accumulation — qui est
+précisément ce qui différencie la config 18 epochs (marchait) de la config 40 epochs (collapse).
+Un sweep lambda seul, sans changer la métrique, risque de rester sensible au même effet à mesure
+que l'horizon s'allonge encore (ex. si un futur run passe à plus de 40 epochs).
+
+**Confirmation indépendante au niveau de la validation** : le log epoch-par-epoch montre le
+"freeze-shock" déjà nommé dans `docs/fisheradaptune_freeze_experiments.md`, ici visible
+directement sur la courbe de val-accuracy agrégée (pas seulement par couche comme dans l'analyse
+v5) : epoch 20 (juste avant la coupe) `accuracy=0.6678`, epoch 21 (juste après)
+`accuracy=0.4951` (-17,3 points, `loss` 0.97→1.39), récupération progressive sur ~7 epochs sans
+jamais redépasser franchement le pic pré-gel (meilleur post-gel : epoch 28, `accuracy=0.6617`,
+encore sous 0.6678), puis `EarlyStopping` déclenché à l'epoch 32. Le `test_accuracy=0.6574`
+final est cohérent avec ce plateau post-choc, pas avec le pic pré-gel — une partie du coût
+d'accuracy vs. `nofreeze` (0.7273) vient donc autant de ce plateau de récupération que du volume
+de params gelés en lui-même.

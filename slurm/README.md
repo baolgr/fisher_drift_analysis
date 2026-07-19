@@ -127,6 +127,48 @@ metrics_plots/*.png -- now including the 3 new Appendix-B.1-style plots, see
   standard Alliance Canada guidance as far as I know, but flagging that it's on a different
   confidence footing than the corrections above.
 
+## Diagnostic fix jobs for the vit_small_freeze over-freezing issue (2026-07-19)
+
+`runs/vit_small_freeze/` (the cluster-config run already completed, log recovered as
+`slurm/logs/vit_freeze-16724978.out`) froze 90.8% of trainable params instead of the ~51% the
+18-epoch config validated to -- see `docs/2026-07-19_vit_cluster_run_curve_analysis.md` §6 for
+the full diagnosis (root cause: `total_variation`'s cumulative-sum scoring lets small-tensor
+JS-histogram noise dominate over a 40-epoch/36-EMA-update accumulation window, systematically
+freezing large weight-matrix chunks while sparing small ones). Three single-variable fix
+attempts, each changing exactly one Fisher/freeze knob from `config_vit_small_cluster.yaml`:
+
+- `train_vit_freeze_fix_meanjs.sh` -- `chunk_selection_metric: mean_js` (averages JS readings
+  instead of summing deltas, so it shouldn't inflate with accumulation window length).
+- `train_vit_freeze_fix_lambda13.sh` -- `js_variance_lambda: -1.3` (more permissive threshold,
+  same `total_variation` metric).
+- `train_vit_freeze_fix_lambda16.sh` -- `js_variance_lambda: -1.6` (second, more permissive
+  point on the same sweep, submitted alongside rather than after `_lambda13` to get two data
+  points in one round given the 2026-07-21 deadline).
+
+Each writes to its own flat `runs/vit_small_freeze_fix_<name>/` directory via a new `run_name`
+config key (`src/train.py`'s `run_training` now reads `cfg["run_name"]` if present, falling back
+to the old `<model>_<freeze|nofreeze>` naming otherwise -- backward compatible, existing configs
+unaffected). This is what makes it safe to submit all three (and the original four jobs) at the
+same time without one run's checkpoints/plots clobbering another's mid-training:
+
+```bash
+sbatch slurm/train_vit_freeze_fix_meanjs.sh
+sbatch slurm/train_vit_freeze_fix_lambda13.sh
+sbatch slurm/train_vit_freeze_fix_lambda16.sh
+```
+
+After they finish, compare against `runs/vit_small_freeze/` (the original over-freezing run) and
+`runs/vit_small_nofreeze/` (the accuracy ceiling) with the existing comparison script:
+
+```bash
+python scripts/compare_runs.py
+```
+
+It globs `runs/*/summary.json` directly, so all three fix runs plus the two original runs show
+up in one table (test accuracy, trainable params, lambda, freeze_interval) without any path
+juggling. Rename whichever run(s) turn out worth keeping to a version-specific name per the
+"After a run" convention below before submitting another job that reuses the same `run_name`.
+
 ## After a run
 
 Per CLAUDE.md's "Running training" section: rename `runs/<model>_<freeze|nofreeze>/` to a
