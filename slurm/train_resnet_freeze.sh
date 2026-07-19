@@ -1,21 +1,21 @@
 #!/bin/bash
 # ResNet50, FisherAdapTune freeze enabled, cluster config (40 epochs).
 # Submit from the repo root: sbatch slurm/train_resnet_freeze.sh
-# See slurm/README.md before your first submission -- at minimum you must
-# edit --account below. NOT YET RUN AT ALL for ResNet50 (any epoch count) --
-# see src/configs/config_resnet50.yaml for the untested BatchNorm-freeze
-# caveat; treat this run's freeze-vs-nofreeze gap as a first real result,
-# not a re-confirmation of the ViT finding.
+# See slurm/README.md before your first submission.
+# --account is already set to def-msh-ab -- confirmed via `sshare -U` (rrg-msh has no GPU share).
+# NOT YET RUN AT ALL for ResNet50 (any epoch count) -- see src/configs/config_resnet50.yaml for
+# the untested BatchNorm-freeze caveat; treat this run's freeze-vs-nofreeze gap as a first real
+# result, not a re-confirmation of the ViT finding.
 
-#SBATCH --account=rrg-msh
+#SBATCH --account=def-msh-ab
 #SBATCH --job-name=resnet_freeze
-#SBATCH --gpus-per-node=h100:1
+#SBATCH --gpus=h100_1g.10gb:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=16G
 #SBATCH --time=03:00:00
 #SBATCH --output=slurm/logs/%x-%j.out
-#SBATCH --mail-user=bao.lugherini@student-cs.fr
-#SBATCH --mail-type=END,FAIL
+# #SBATCH --mail-user=you@example.com
+# #SBATCH --mail-type=END,FAIL
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
