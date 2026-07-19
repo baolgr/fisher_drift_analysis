@@ -2,13 +2,13 @@
 # ViT-small, no-freeze baseline, cluster config (40 epochs).
 # Submit from the repo root: sbatch slurm/train_vit_nofreeze.sh
 # See slurm/README.md before your first submission -- at minimum you must
-# edit --account below.
+# --account is already set to def-msh-ab -- confirmed via `sshare -U` (rrg-msh has no GPU share).
 
-#SBATCH --account=def-CHANGEME
+#SBATCH --account=def-msh-ab
 #SBATCH --job-name=vit_nofreeze
-#SBATCH --gpus-per-node=h100:1
+#SBATCH --gpus=h100_1g.10gb:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=16G
 #SBATCH --time=02:00:00
 #SBATCH --output=slurm/logs/%x-%j.out
 # #SBATCH --mail-user=you@example.com

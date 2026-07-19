@@ -18,9 +18,11 @@ knowledge, not a direct quote.
 
 ## Before your first submission
 
-1. **`--account=def-CHANGEME`** in every script -- replace with your actual Resource Allocation
-   Project (RAP) id (find it via CCDB: *Mes projets -> Mes ressources et allocations*, "Nom du
-   groupe" field). Submitting without a valid `--account` fails immediately.
+1. **`--account`** is already set to `def-msh-ab` in every script -- confirmed via `sshare -U`
+   on Rorqual (`rrg-msh` also exists per `groups` but has no `_gpu` line in `sshare -U`, i.e. no
+   GPU allocation, so it's not usable for these jobs). If you run on a different account later,
+   find its RAP id the same way, or via CCDB (*Mes projets -> Mes ressources et allocations*,
+   "Nom du groupe" field).
 2. **Stage the dataset — required on Rorqual, harmless-but-still-done-here on Fir.** The two
    clusters differ: Fir's compute nodes have full internet access ("Les nœuds de calcul \[de
    Fir\] ont plein accès à l'internet"), but Rorqual's compute nodes do **not**, by policy
@@ -67,20 +69,24 @@ metrics_plots/*.png -- now including the 3 new Appendix-B.1-style plots, see
 
 ## What the scripts request, and why (with sources)
 
-- **`--gpus-per-node=h100:1`, single GPU.** The docs explicitly deprecate the `--gres=gpu:...`
-  form I originally wrote here: *"il est possible que ce format ne soit plus pris en charge.
-  Nous vous recommandons de le remplacer par --gpus-per-node"* -- fixed. `h100` is the correct
-  short identifier on **both** Fir and Rorqual (confirmed in the GPU-availability table on the
-  GPU-scheduling page), so one script works on either without editing. Both clusters' GPU nodes
-  have 4x H100-80GB per node; requesting `:1` takes one of the four. Neither model needs more --
-  ViT-small is ~2.7M params, ResNet50 ~25M, both on 32x32 CIFAR-10, and `train.py` has no
-  `DistributedDataParallel`/multi-GPU code path to use a second GPU even if requested.
-- **`--mem=32G`, not `--mem=0`.** This was a real mistake in the first draft: `--mem=0` means
-  "all memory on the node," which is fine for a full-node job but inappropriate here -- a
-  single-GPU-of-4 request that also grabbed all node memory would starve the other 3 GPUs of
-  usable memory on a shared node, wasting resources other jobs need. 32G is generous headroom
-  for these model/batch sizes (well under either cluster's per-node total: Fir GPU nodes have
-  1125G/4 GPUs, Rorqual 498G/4 GPUs).
+- **`--gpus=h100_1g.10gb:1`, a MIG slice, not a full H100.** Went through two corrections here.
+  First: the docs deprecate `--gres=gpu:...` (*"il est possible que ce format ne soit plus pris
+  en charge. Nous vous recommandons de le remplacer par --gpus-per-node"*) in favour of
+  `--gpus-per-node`/`--gpus`. Second, on Rorqual specifically: `def-msh-ab`'s actual GPU
+  allocation only supports a MIG slice, not a full `h100:1` -- switched to `h100_1g.10gb`
+  (1/8 compute, 10GB memory) after confirming end to end via `slurm/validate_setup.sh` on real
+  hardware (full fast test suite + a real training epoch, both passed). Comfortably enough for
+  these models -- ViT-small ~2.7M params, ResNet50 ~25M, both on 32x32 CIFAR-10, well under
+  10GB either way, and `train.py` has no `DistributedDataParallel`/multi-GPU path regardless.
+  If you run on an account with a full-H100 allocation instead, `--gpus=h100:1` (or
+  `--gpus-per-node=h100:1`) is the non-MIG equivalent -- `h100` is confirmed the correct short
+  identifier on both Fir and Rorqual.
+- **`--mem=16G`.** Sized down from an initial `--mem=32G` guess once the GPU request became a
+  MIG slice rather than a quarter of a full node -- `--mem=0` (all node memory) would be
+  actively harmful on a shared MIG node (starves the other instances), and 32G no longer made
+  sense as a "generous quarter-node" estimate once the GPU share itself shrank to 1/8. 16G
+  keeps headroom above the `--mem=8G` that `validate_setup.sh` empirically ran fine with, for
+  the longer 40-epoch runs.
 - **`--cpus-per-task=8`.** Comfortably under both clusters' documented per-GPU maximums (Fir: up
   to 12 cores/GPU; Rorqual: up to 16 cores/GPU, from each cluster's hardware page) and matches
   the `num_workers=6` set in the cluster configs with a little headroom for the main process.

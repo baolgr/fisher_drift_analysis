@@ -3,7 +3,7 @@
 # script (no #SBATCH directives; run manually after salloc grants a shell).
 #
 # Usage, from the repo root on the login node:
-#   salloc --time=0:15:0 --account=def-CHANGEME --gpus-per-node=h100:1 --cpus-per-task=8 --mem=8G
+#   salloc --time=0:15:0 --account=def-msh-ab --gpus=h100_1g.10gb:1 --cpus-per-task=8 --mem=8G
 #   cd fisher_drift_analysis   # or wherever you cloned/rsynced it, if not already there
 #   bash slurm/validate_setup.sh
 #   exit   # release the allocation once done
