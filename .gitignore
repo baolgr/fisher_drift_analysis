@@ -5,10 +5,9 @@ FisherAdapTune/
 # CIFAR-10 data -- large (~340M), re-downloadable via torchvision, not source.
 dataset/
 
-# Training checkpoints -- large binaries (~100-125M per run here already), fully
-# regenerable by re-running the config in runs/<name>/summary.json. Everything
-# else under runs/ (summary.json, train.log, metrics_plots/*.png) stays tracked --
-# that's the actual experiment record, not a build artifact.
+# Entire runs/ tree (summary.json, train.log, metrics_plots/*.png, checkpoints/) --
+# untracked from GitHub 2026-07-19 (repo is public; run artifacts kept local-only
+# from here on, re-derivable by re-running the config). Files remain on disk.
 runs/
 
 # SLURM job output (see slurm/README.md) -- one file per job submission;
