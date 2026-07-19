@@ -1,0 +1,166 @@
+[Val] Baseline validation before training...
+[Val] Baseline: loss=2.4206  accuracy=0.0916
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+[Freeze] Zero-Fisher chunks found and frozen: 2
+[Freeze] Step 0 zero-Fisher freeze: tensors=78, chunks=408, params=2,680,906
+Epoch 1/18: train_loss=1.7974  loss=1.7878  accuracy=0.3535
+Epoch 2/18: train_loss=1.5430  loss=1.5426  accuracy=0.4410
+Epoch 3/18: train_loss=1.4263  loss=1.4572  accuracy=0.4879
+Epoch 4/18: train_loss=1.3522  loss=1.4130  accuracy=0.4953
+Epoch 5/18: train_loss=1.2900  loss=1.2867  accuracy=0.5400
+[Checkpoint] Saved to runs/vit_small_nofreeze/checkpoints/fisher_adapt_tune_checkpoint_epoch5.pth
+Epoch 6/18: train_loss=1.2481  loss=1.2511  accuracy=0.5506
+Epoch 7/18: train_loss=1.2011  loss=1.2279  accuracy=0.5645
+Epoch 8/18: train_loss=1.1739  loss=1.2097  accuracy=0.5607
+Epoch 9/18: train_loss=1.1355  loss=1.1954  accuracy=0.5719
+Epoch 10/18: train_loss=1.1004  loss=1.1669  accuracy=0.5855
+[Checkpoint] Saved to runs/vit_small_nofreeze/checkpoints/fisher_adapt_tune_checkpoint_epoch10.pth
+Epoch 11/18: train_loss=1.0765  loss=1.1177  accuracy=0.5973
+Epoch 12/18: train_loss=1.0455  loss=1.1520  accuracy=0.5949
+Epoch 13/18: train_loss=1.0276  loss=1.0672  accuracy=0.6189
+Epoch 14/18: train_loss=1.0014  loss=1.0679  accuracy=0.6195
+Epoch 15/18: train_loss=0.9788  loss=1.0782  accuracy=0.6186
+[Checkpoint] Saved to runs/vit_small_nofreeze/checkpoints/fisher_adapt_tune_checkpoint_epoch15.pth
+Epoch 16/18: train_loss=0.9571  loss=1.0520  accuracy=0.6301
+Epoch 17/18: train_loss=0.9372  loss=1.0078  accuracy=0.6488
+Epoch 18/18: train_loss=0.9161  loss=0.9974  accuracy=0.6504
+[Checkpoint] Saved to runs/vit_small_nofreeze/checkpoints/fisher_adapt_tune_checkpoint.pth
+{
+  "model": "vit_small",
+  "disable_freeze": true,
+  "test_loss": 0.976702163491068,
+  "test_accuracy": 0.6542721518987342,
+  "trainable_params": 2680906,
+  "total_params": 2693578,
+  "config": {
+    "data_root": "dataset",
+    "seed": 0,
+    "batch_size": 128,
+    "num_workers": 2,
+    "vit": {
+      "patch_size": 4,
+      "embed_dim": 192,
+      "depth": 6,
+      "num_heads": 3,
+      "mlp_ratio": 4.0,
+      "drop": 0.1
+    },
+    "num_epochs": 18,
+    "learning_rate": 0.0003,
+    "weight_decay": 5e-05,
+    "early_stopping_patience": 6,
+    "output_dir": "runs",
+    "fisher_ema_interval": 50,
+    "freeze_interval": 300,
+    "fisher_slice_mode": "row",
+    "fisher_slice_blocks": 4,
+    "js_distance_mode": "log",
+    "chunk_selection_metric": "total_variation",
+    "js_variance_lambda": 1.0,
+    "wandb_project": "FisherAdapTune-CIFAR10"
+  }
+}
+[Val] Baseline validation before training...
+[Val] Baseline: loss=2.4206  accuracy=0.0916
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+[Freeze] Zero-Fisher chunks found and frozen: 2
+[Freeze] Step 0 zero-Fisher freeze: tensors=78, chunks=408, params=2,680,906
+[Freeze] Step 300: variation mean=0.2431 std=0.1021 λ=1.000 threshold=0.3452 | frozen=379 remaining=29
+[Freeze] Step 300: trainable tensors=8 chunks=29 params=1,210
+Epoch 1/18: train_loss=2.1633  loss=4.2634  accuracy=0.1139
+[Freeze] Step 600: variation mean=0.5761 std=0.0244 λ=1.000 threshold=0.6005 | frozen=28 remaining=1
+[Freeze] Step 600: trainable tensors=1 chunks=1 params=3
+Epoch 2/18: train_loss=4.0196  loss=3.8344  accuracy=0.1266
+[Freeze] Step 900: variation mean=0.7076 std=0.0000 λ=1.000 threshold=0.7076 | frozen=0 remaining=1
+[Freeze] Step 900: trainable tensors=1 chunks=1 params=3
+Epoch 3/18: train_loss=3.8268  loss=3.7669  accuracy=0.1271
+[Freeze] Step 1200: variation mean=0.7661 std=0.0000 λ=1.000 threshold=0.7661 | frozen=0 remaining=1
+[Freeze] Step 1200: trainable tensors=1 chunks=1 params=3
+Epoch 4/18: train_loss=3.7644  loss=3.7075  accuracy=0.1283
+[Freeze] Step 1500: variation mean=0.8154 std=0.0000 λ=1.000 threshold=0.8154 | frozen=0 remaining=1
+[Freeze] Step 1500: trainable tensors=1 chunks=1 params=3
+Epoch 5/18: train_loss=3.7088  loss=3.6537  accuracy=0.1299
+[Checkpoint] Saved to runs/vit_small_freeze/checkpoints/fisher_adapt_tune_checkpoint_epoch5.pth
+[Freeze] Step 1800: variation mean=0.8658 std=0.0000 λ=1.000 threshold=0.8658 | frozen=0 remaining=1
+[Freeze] Step 1800: trainable tensors=1 chunks=1 params=3
+[Freeze] Step 2100: variation mean=0.9284 std=0.0000 λ=1.000 threshold=0.9284 | frozen=0 remaining=1
+[Freeze] Step 2100: trainable tensors=1 chunks=1 params=3
+Epoch 6/18: train_loss=3.6601  loss=3.6043  accuracy=0.1295
+[Freeze] Step 2400: variation mean=0.9950 std=0.0000 λ=1.000 threshold=0.9950 | frozen=0 remaining=1
+[Freeze] Step 2400: trainable tensors=1 chunks=1 params=3
+Epoch 7/18: train_loss=3.6112  loss=3.5591  accuracy=0.1309
+[Freeze] Step 2700: variation mean=1.0509 std=0.0000 λ=1.000 threshold=1.0509 | frozen=0 remaining=1
+[Freeze] Step 2700: trainable tensors=1 chunks=1 params=3
+Epoch 8/18: train_loss=3.5718  loss=3.5176  accuracy=0.1305
+[Freeze] Step 3000: variation mean=1.0785 std=0.0000 λ=1.000 threshold=1.0785 | frozen=0 remaining=1
+[Freeze] Step 3000: trainable tensors=1 chunks=1 params=3
+Epoch 9/18: train_loss=3.5304  loss=3.4797  accuracy=0.1307
+[Freeze] Step 3300: variation mean=1.1176 std=0.0000 λ=1.000 threshold=1.1176 | frozen=0 remaining=1
+[Freeze] Step 3300: trainable tensors=1 chunks=1 params=3
+Epoch 10/18: train_loss=3.4951  loss=3.4452  accuracy=0.1313
+[Checkpoint] Saved to runs/vit_small_freeze/checkpoints/fisher_adapt_tune_checkpoint_epoch10.pth
+[Freeze] Step 3600: variation mean=1.1346 std=0.0000 λ=1.000 threshold=1.1346 | frozen=0 remaining=1
+[Freeze] Step 3600: trainable tensors=1 chunks=1 params=3
+Epoch 11/18: train_loss=3.4640  loss=3.4139  accuracy=0.1313
+[Freeze] Step 3900: variation mean=1.1437 std=0.0000 λ=1.000 threshold=1.1437 | frozen=0 remaining=1
+[Freeze] Step 3900: trainable tensors=1 chunks=1 params=3
+[Freeze] Step 4200: variation mean=1.1485 std=0.0000 λ=1.000 threshold=1.1485 | frozen=0 remaining=1
+[Freeze] Step 4200: trainable tensors=1 chunks=1 params=3
+Epoch 12/18: train_loss=3.4344  loss=3.3854  accuracy=0.1311
+[Freeze] Step 4500: variation mean=1.1510 std=0.0000 λ=1.000 threshold=1.1510 | frozen=0 remaining=1
+[Freeze] Step 4500: trainable tensors=1 chunks=1 params=3
+Epoch 13/18: train_loss=3.4088  loss=3.3596  accuracy=0.1322
+[Freeze] Step 4800: variation mean=1.1524 std=0.0000 λ=1.000 threshold=1.1524 | frozen=0 remaining=1
+[Freeze] Step 4800: trainable tensors=1 chunks=1 params=3
+Epoch 14/18: train_loss=3.3832  loss=3.3361  accuracy=0.1334
+[Freeze] Step 5100: variation mean=1.1819 std=0.0000 λ=1.000 threshold=1.1819 | frozen=0 remaining=1
+[Freeze] Step 5100: trainable tensors=1 chunks=1 params=3
+Epoch 15/18: train_loss=3.3616  loss=3.3146  accuracy=0.1336
+[Checkpoint] Saved to runs/vit_small_freeze/checkpoints/fisher_adapt_tune_checkpoint_epoch15.pth
+[Freeze] Step 5400: variation mean=1.1915 std=0.0000 λ=1.000 threshold=1.1915 | frozen=0 remaining=1
+[Freeze] Step 5400: trainable tensors=1 chunks=1 params=3
+Epoch 16/18: train_loss=3.3410  loss=3.2950  accuracy=0.1422
+[Freeze] Step 5700: variation mean=1.1967 std=0.0000 λ=1.000 threshold=1.1967 | frozen=0 remaining=1
+[Freeze] Step 5700: trainable tensors=1 chunks=1 params=3
+Epoch 17/18: train_loss=3.3226  loss=3.2770  accuracy=0.1406
+[Freeze] Step 6000: variation mean=1.1994 std=0.0000 λ=1.000 threshold=1.1994 | frozen=0 remaining=1
+[Freeze] Step 6000: trainable tensors=1 chunks=1 params=3
+[Freeze] Step 6300: variation mean=1.2008 std=0.0000 λ=1.000 threshold=1.2008 | frozen=0 remaining=1
+[Freeze] Step 6300: trainable tensors=1 chunks=1 params=3
+Epoch 18/18: train_loss=3.3042  loss=3.2605  accuracy=0.1387
+[Checkpoint] Saved to runs/vit_small_freeze/checkpoints/fisher_adapt_tune_checkpoint.pth
+{
+  "model": "vit_small",
+  "disable_freeze": false,
+  "test_loss": 3.256610861307458,
+  "test_accuracy": 0.13894382911392406,
+  "trainable_params": 3,
+  "total_params": 2693578,
+  "config": {
+    "data_root": "dataset",
+    "seed": 0,
+    "batch_size": 128,
+    "num_workers": 2,
+    "vit": {
+      "patch_size": 4,
+      "embed_dim": 192,
+      "depth": 6,
+      "num_heads": 3,
+      "mlp_ratio": 4.0,
+      "drop": 0.1
+    },
+    "num_epochs": 18,
+    "learning_rate": 0.0003,
+    "weight_decay": 5e-05,
+    "early_stopping_patience": 6,
+    "output_dir": "runs",
+    "fisher_ema_interval": 50,
+    "freeze_interval": 300,
+    "fisher_slice_mode": "row",
+    "fisher_slice_blocks": 4,
+    "js_distance_mode": "log",
+    "chunk_selection_metric": "total_variation",
+    "js_variance_lambda": 1.0,
+    "wandb_project": "FisherAdapTune-CIFAR10"
+  }
+}

@@ -1,0 +1,18 @@
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+Device: mps
+[Freeze] Zero-Fisher chunks found and frozen: 1
+[Freeze] Step 0 zero-Fisher freeze: tensors=26, chunks=152, params=2,665,344
+[Freeze] Step 350: variation mean=0.1978 std=0.0551 λ=0.300 threshold=0.2143 | frozen=120 remaining=32
+[Freeze] Step 350: trainable tensors=6 chunks=32 params=342,912
+Epoch 1/4: train_loss=1.8088  
+[Freeze] Step 700: variation mean=0.3436 std=0.0951 λ=0.300 threshold=0.3722 | frozen=28 remaining=4
+[Freeze] Step 700: trainable tensors=1 chunks=4 params=9,216
+Epoch 2/4: train_loss=1.9360  
+[Freeze] Step 1050: variation mean=0.7241 std=0.0001 λ=0.300 threshold=0.7242 | frozen=2 remaining=2
+[Freeze] Step 1050: trainable tensors=1 chunks=2 params=4,608
+Epoch 3/4: train_loss=1.9559  
+[Freeze] Step 1400: variation mean=0.8020 std=0.0001 λ=0.300 threshold=0.8021 | frozen=1 remaining=1
+[Freeze] Step 1400: trainable tensors=1 chunks=1 params=2,304
+Epoch 4/4: train_loss=1.8038  
+[Checkpoint] Saved to /tmp/freeze_probe/checkpoints/fisher_adapt_tune_checkpoint.pth
+DONE — 4 freeze checkpoints captured, fisher_ema_interval=35 freeze_interval=350 lambda=0.3 min_freeze_param_numel=1024

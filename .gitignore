@@ -1,0 +1,39 @@
+# Upstream reference repo -- separate git clone (own history, own .git), read-only,
+# never vendor it into this repo. See CLAUDE.md's "Hard rule".
+FisherAdapTune/
+
+# CIFAR-10 data -- large (~340M), re-downloadable via torchvision, not source.
+dataset/
+
+# Training checkpoints -- large binaries (~100-125M per run here already), fully
+# regenerable by re-running the config in runs/<name>/summary.json. Everything
+# else under runs/ (summary.json, train.log, metrics_plots/*.png) stays tracked --
+# that's the actual experiment record, not a build artifact.
+runs/*/checkpoints/
+
+# SLURM job output (see slurm/README.md) -- one file per job submission;
+# keep the directory itself (via slurm/logs/.gitkeep) since sbatch needs
+# --output's directory to already exist.
+slurm/logs/*
+!slurm/logs/.gitkeep
+slurm-*.out
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments (cluster jobs build one per job under $SLURM_TMPDIR, not here;
+# this covers a local venv if one is ever created instead of the atlas conda env)
+.venv/
+venv/
+env/
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+
+# Claude Code runtime state (lock files etc., not shared project config)
+.claude/

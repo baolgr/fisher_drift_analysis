@@ -1,0 +1,77 @@
+# CIFAR-10 benchmark config -- small ViT (from scratch, AdamW)
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 2
+
+# Model
+vit:
+  patch_size: 4
+  embed_dim: 192
+  depth: 6
+  num_heads: 3
+  mlp_ratio: 4.0
+  drop: 0.1
+
+# Training
+num_epochs: 18
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+# patience=6 was tuned against the no-freeze loss curve (smooth, monotone).
+# The freeze run has a real, expected loss regression right after each
+# freeze event (weight-decay pass + reduced trainable set need a few epochs
+# to re-adapt) -- recovery took ~6 epochs at step 2000, so patience=6
+# stopped it mid-recovery, before it beat its pre-freeze best or reached the
+# next freeze_interval boundary. 12 gives a full recovery cycle of slack.
+
+# Fisher / freeze -- all values below are the library's own knobs (no custom
+# code added to fisher_core.py/trainer.py beyond this project's pre-existing
+# step_callback hook). VALIDATED: 0.6502 test accuracy vs. 0.6543 no-freeze
+# (99.4%), 48.9% of params retained. Full trail of what was tried and why in
+# docs/fisheradaptune_freeze_experiments.md -- read that before changing any
+# value below, it documents five prior attempts that looked reasonable and
+# weren't (collapsed to near-zero params, or plateaued well under target).
+#
+# Old values (50/300/lambda=1.0) were the README's toy smoke-test knobs, not
+# its validated real-world defaults (300/3000, confirmed in the paper's own
+# Appendix B.2) -- with our short schedule that fired ~21 aggressive
+# threshold=mean+lambda*std cuts, collapsing to a 3-param floor by epoch 2
+# (see runs/vit_small_freeze_buggy_lambda1_interval300/).
+#
+# freeze_interval=3200 > total_steps/2 (18 epochs * 351 steps/epoch = 6318)
+# so only ONE freeze decision ever fires, ~2/3 through training. Multi-event
+# schedules were tried (freeze_interval=2000, 2-3 decisions) but each cut
+# recomputes mean+lambda*std over the *surviving* chunks only -- measured
+# empirically that the 2nd cut kept far less than the 1st regardless of
+# lambda (confirmed independently by the paper's Algorithm 2: the freeze
+# statistic's mu/sigma baseline is recomputed only over the still-active
+# set every round, with no unfreeze step anywhere -- this compounding is
+# how the method is specified, not a bug in this implementation). A single,
+# later, well-timed cut avoids it entirely.
+#
+# js_variance_lambda=-1.0: the paper's own Appendix B.2/Figure 12 ablation
+# never tests a positive lambda -- their validated range is roughly -0.85 to
+# -0.95 across 4 model/dataset combinations ("larger |lambda| retains more
+# groups"; "more conservative freezing generally improves in-distribution
+# performance"). -1.0 sits just past their optimum on the retain-more side,
+# which suits an accuracy-parity goal (their optimum instead balances
+# against a zero-shot-generalization axis we don't have here). At this
+# permissive a threshold, small tensors' histogram-sampling-noise bias
+# (biases/LayerNorm reading as more "volatile" than weight matrices purely
+# from 64-bin histograms built on ~48-element chunks) stops mattering --
+# nearly everything of either kind clears the bar, so the bias never gets a
+# chance to skew which chunks survive.
+fisher_ema_interval: 200
+freeze_interval: 3200
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: total_variation
+js_variance_lambda: -1.0
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

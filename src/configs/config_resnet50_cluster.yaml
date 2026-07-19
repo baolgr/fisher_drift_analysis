@@ -1,0 +1,39 @@
+# CIFAR-10 benchmark config -- ResNet50 (from scratch, AdamW), cluster variant.
+#
+# Same reasoning as config_vit_small_cluster.yaml (read that file's header first):
+# num_epochs 18->40, num_workers 2->6 for cluster throughput, and
+# freeze_interval recomputed 3200->7200 to preserve the single-late-event
+# property under the longer schedule. ResNet50 shares the exact same
+# steps_per_epoch=351 as ViT (identical batch_size/dataset, confirmed in
+# config_resnet50.yaml's own comment), so the same 6318->14040 total_steps
+# and 3200->7200 freeze_interval math applies unchanged.
+#
+# Still NOT YET RUN for ResNet50 at any epoch count -- see config_resnet50.yaml
+# for the BatchNorm-vs-LayerNorm size-scaling caveat (untested whether the
+# small-tensor freeze bias found on ViT holds or worsens here).
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+
+# Fisher / freeze -- see config_resnet50.yaml for the full rationale on the
+# values that didn't change, and this file's header above for what did.
+fisher_ema_interval: 200
+freeze_interval: 7200
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: total_variation
+js_variance_lambda: -1.0
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

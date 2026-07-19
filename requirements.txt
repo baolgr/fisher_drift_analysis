@@ -1,0 +1,13 @@
+# Minimum versions only, not exact pins: on Alliance Canada clusters this gets
+# installed via `pip install --no-index -r requirements.txt` against their own
+# curated wheelhouse (see slurm/README.md), which carries specific versions per
+# Python/CUDA build -- an exact pin from local dev (macOS/MPS) could easily not
+# exist there and fail the install. Locally (conda env `atlas`) versions in use
+# as of 2026-07-19: torch 2.13.0, torchvision 0.28.0, numpy 2.4.6,
+# matplotlib 3.11.0, pyyaml 6.0.3, pytest 9.1.1.
+torch>=2.0
+torchvision>=0.15
+numpy>=1.24
+matplotlib>=3.7
+pyyaml>=6.0
+pytest>=7.0
