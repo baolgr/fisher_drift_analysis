@@ -1,0 +1,53 @@
+# CIFAR-10 benchmark config -- ResNet50, cluster variant, SWEEP PROBE:
+# js_variance_lambda=-0.4 (more aggressive than the baseline -1.0 run).
+#
+# Part of a 4-job lambda/chunk_selection_metric sweep for ResNet50, mirroring
+# the ViT sweep in docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md
+# but with a DIFFERENT shape, deliberately -- see
+# docs/2026-07-19_resnet50_cluster_run_curve_analysis.md §7 for why: unlike
+# the ViT baseline (lambda=-1.0, total_variation), which over-froze 90.9% of
+# params and lost 9.6 accuracy points, the ResNet50 baseline
+# (runs/resnet50_freeze/, same lambda/metric) already retains 32.8% of
+# params at only 0.33 accuracy points lost (99.67% relative) -- there is no
+# known bug to fix here. The open question from that report's §7 is instead
+# "is lambda=-1.0 near-optimal, or just not aggressive enough to hurt yet" --
+# answering that needs points on BOTH sides of -1.0, not just the
+# less-aggressive direction the ViT fix sweep needed. This config is the
+# more-aggressive end of that bracket (paired with _lambda07, one step in;
+# _lambda13 is the less-aggressive control point, matching the ViT sweep's
+# only-fix-direction; _meanjs swaps the metric instead of lambda).
+#
+# Everything else identical to config_resnet50_cluster.yaml (40 epochs,
+# freeze_interval=7200, total_variation) -- only js_variance_lambda differs.
+#
+# run_name gives this its own flat runs/resnet50_freeze_sweep_lambda04/
+# directory (see src/train.py's run_training) so all 4 sweep jobs plus the
+# existing resnet50_freeze/resnet50_nofreeze can run concurrently without
+# collision.
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+run_name: resnet50_freeze_sweep_lambda04
+
+# Fisher / freeze -- only js_variance_lambda changed from
+# config_resnet50_cluster.yaml, see header comment above.
+fisher_ema_interval: 200
+freeze_interval: 7200
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: total_variation
+js_variance_lambda: -0.4
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

@@ -1,0 +1,64 @@
+# CIFAR-10 benchmark config -- small ViT, cluster variant, COMBINED FIX:
+# chunk_selection_metric=mean_js AND js_variance_lambda=-1.3 together.
+#
+# Noted as the most promising untried piste in
+# docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §7 ("Combiner les
+# deux corrections") and already flagged (but never launched) in the header
+# of config_vit_small_cluster_fix_lambda13.yaml. Rationale: of the 3
+# single-variable fixes already run, `fix_meanjs` (mean_js, lambda=-1.0) is
+# the only one that freezes attention chunks at all, and does so with the
+# early-vs-late split plan.md explicitly asks for (early attention frozen,
+# late attention spared -- see report §3 point 2) -- but it still costs 2.4
+# accuracy points (97.6% relative) at lambda=-1.0. `fix_lambda13` (still
+# total_variation, lambda=-1.3) recovers accuracy to 99.2% relative but never
+# touches attention at all (report §5: 0 Attn chunks frozen). This config
+# tests whether mean_js's attention-sensitivity survives at lambda=-1.3's
+# more permissive threshold -- i.e. whether "gel de l'attention précoce" and
+# "quasi aucune perte d'accuracy" can be had simultaneously, rather than
+# picking one or the other of the two already-run fixes.
+#
+# Everything else identical to config_vit_small_cluster.yaml (40 epochs,
+# freeze_interval=7200) -- only chunk_selection_metric and js_variance_lambda
+# differ from the validated cluster baseline, same "one axis of the sweep
+# grid at a time... except this one combines two already-validated single
+# changes" pattern as the rest of this sweep.
+#
+# run_name gives this its own flat runs/vit_small_freeze_fix_meanjs_lambda13/
+# directory so it can run alongside every other run in this sweep without
+# collision (see src/train.py's run_training).
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Model
+vit:
+  patch_size: 4
+  embed_dim: 192
+  depth: 6
+  num_heads: 3
+  mlp_ratio: 4.0
+  drop: 0.1
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+run_name: vit_small_freeze_fix_meanjs_lambda13
+
+# Fisher / freeze -- both chunk_selection_metric and js_variance_lambda
+# changed from the validated cluster config, see header comment above.
+fisher_ema_interval: 200
+freeze_interval: 7200
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: mean_js
+js_variance_lambda: -1.3
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

@@ -36,6 +36,7 @@ from src.utils.layers import (
     resolve_chunk_layer_and_block,
     resolve_layer_chunk_keys,
 )
+from src.utils.logs import parse_val_accuracy_history
 from src.utils.metrics import LayerMetricRecorder
 from src.utils.plotting import (
     plot_all_metrics_grid,
@@ -279,10 +280,41 @@ def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: 
 
     metrics_dir = output_dir / "metrics_plots"
     all_metrics = recorder.as_dict()
+    # freeze is a single one-shot trigger (see CLAUDE.md/plan.md), so the
+    # step it fires at is exactly freeze_interval -- with --disable-freeze
+    # that's num_epochs*steps_per_epoch+1, past every plotted step, so the
+    # marker is silently skipped by plot_metric_evolution rather than
+    # needing a separate None-vs-value branch here.
+    accuracy_history = parse_val_accuracy_history(output_dir / "train.log", steps_per_epoch)
     for metric_name, metric_history in all_metrics.items():
-        plot_metric_evolution(metric_history, metric_name, metrics_dir / f"{metric_name}.png")
+        plot_metric_evolution(
+            metric_history, metric_name, metrics_dir / f"{metric_name}.png",
+            freeze_step=freeze_interval,
+            # Overlay directly on fisher_drift.png only (report §7): that's
+            # the one figure §4 shows can look like a real behavior change
+            # right at the freeze step when it's actually a mean-recomposition
+            # artifact -- the accuracy curve alongside it lets a reader see
+            # the freeze-shock for what it is instead.
+            accuracy_history=accuracy_history if metric_name == "fisher_drift" else None,
+        )
     plot_all_metrics_grid(all_metrics, metrics_dir / "all_metrics_grid.png")
     _plot_fisher_group_summaries(trainer, model_name, metrics_dir)
+
+    # Raw per-step/per-chunk history, so a future plotting-code change can
+    # regenerate every PNG above from this run without re-training --
+    # metrics_plots/*.png alone don't carry the underlying series back out.
+    with open(metrics_dir / "history.json", "w") as f:
+        json.dump(
+            {
+                "model": model_name,
+                "freeze_step": freeze_interval,
+                "accuracy_history": accuracy_history,
+                "metrics": all_metrics,
+                "chunk_js_history": trainer._chunk_js_history,
+                "chunk_to_class": trainer._chunk_to_class,
+            },
+            f,
+        )
 
     summary = {
         "model": model_name,

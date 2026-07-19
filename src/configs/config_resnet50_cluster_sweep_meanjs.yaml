@@ -1,0 +1,48 @@
+# CIFAR-10 benchmark config -- ResNet50, cluster variant, SWEEP PROBE:
+# chunk_selection_metric=mean_js instead of total_variation, lambda
+# unchanged at -1.0. See config_resnet50_cluster_sweep_lambda04.yaml's
+# header for the full rationale on this 4-job bracket.
+#
+# On ViT, swapping to mean_js (docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md
+# §5) changed WHICH chunks got frozen (distributed across Norm/Attn/MLP-FC
+# instead of concentrated in MLP-FC alone), not just how many. ResNet50 has
+# no attention axis, but the same question applies to its two groups: does
+# mean_js redistribute freezing between BatchNorm and Conv/FC differently
+# than total_variation's current pattern
+# (docs/2026-07-19_resnet50_cluster_run_curve_analysis.md §5: BatchNorm
+# drifts higher than Conv/FC in both runs, consistent with the same
+# small-tensor JS-noise bias already documented on ViT's LayerNorm) -- or
+# does mean_js's noise-normalization change which stage (early/late) gets
+# frozen, the axis plan.md point 7 asks about directly.
+#
+# Everything else identical to config_resnet50_cluster.yaml (40 epochs,
+# freeze_interval=7200) -- only chunk_selection_metric differs.
+#
+# run_name -> runs/resnet50_freeze_sweep_meanjs/
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+run_name: resnet50_freeze_sweep_meanjs
+
+# Fisher / freeze -- only chunk_selection_metric changed from
+# config_resnet50_cluster.yaml.
+fisher_ema_interval: 200
+freeze_interval: 7200
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: mean_js
+js_variance_lambda: -1.0
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

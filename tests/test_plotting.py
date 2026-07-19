@@ -21,6 +21,8 @@ from src.utils.plotting import (
     plot_chunk_drift_heatmap,
     plot_chunk_drift_trajectories_by_tier,
     plot_drift_violin_by_group,
+    plot_lambda_metric_sweep,
+    plot_metric_evolution,
 )
 
 _DEPTH_GROUP_ORDER = {
@@ -157,3 +159,59 @@ def test_plot_functions_noop_on_empty_input(tmp_path):
     assert not (tmp_path / "empty_heatmap.png").exists()
     assert not (tmp_path / "empty_tiers.png").exists()
     assert not (tmp_path / "empty_violin.png").exists()
+
+
+# ---------------------------------------------------------------------------
+# plot_metric_evolution: freeze-step marker + accuracy overlay (report §4/§7)
+# ---------------------------------------------------------------------------
+
+
+def test_plot_metric_evolution_renders_with_freeze_marker_and_accuracy_overlay(tmp_path):
+    history = {"layer.a": [(i * 100, 0.1 * i) for i in range(10)]}
+    accuracy_history = [(i * 200, 0.4 + 0.02 * i) for i in range(5)]
+    out_path = tmp_path / "fisher_drift.png"
+    plot_metric_evolution(
+        history, "fisher_drift", out_path, freeze_step=500, accuracy_history=accuracy_history
+    )
+    assert out_path.exists() and out_path.stat().st_size > 0
+
+
+def test_plot_metric_evolution_skips_freeze_marker_out_of_range(tmp_path):
+    # --disable-freeze passes freeze_interval far past the last plotted step
+    # (see src/train.py) -- must not raise or draw a marker off the axis.
+    history = {"layer.a": [(i * 100, 0.1 * i) for i in range(10)]}
+    out_path = tmp_path / "fisher_drift.png"
+    plot_metric_evolution(history, "fisher_drift", out_path, freeze_step=10**9)
+    assert out_path.exists() and out_path.stat().st_size > 0
+
+
+def test_plot_metric_evolution_without_optional_args_still_renders(tmp_path):
+    history = {"layer.a": [(i * 100, 0.1 * i) for i in range(10)]}
+    out_path = tmp_path / "grad_norm.png"
+    plot_metric_evolution(history, "grad_norm", out_path)
+    assert out_path.exists() and out_path.stat().st_size > 0
+
+
+# ---------------------------------------------------------------------------
+# plot_lambda_metric_sweep: cross-run comparison figure
+# ---------------------------------------------------------------------------
+
+
+def test_plot_lambda_metric_sweep_renders(tmp_path):
+    rows = [
+        {"label": "nofreeze", "lambda": None, "chunk_selection_metric": "nofreeze",
+         "pct_retained": 100.0, "accuracy_relative": 100.0},
+        {"label": "freeze", "lambda": -1.0, "chunk_selection_metric": "total_variation",
+         "pct_retained": 9.1, "accuracy_relative": 90.4},
+        {"label": "fix_meanjs", "lambda": -1.0, "chunk_selection_metric": "mean_js",
+         "pct_retained": 48.9, "accuracy_relative": 97.6},
+    ]
+    out_path = tmp_path / "sweep.png"
+    plot_lambda_metric_sweep(rows, out_path)
+    assert out_path.exists() and out_path.stat().st_size > 0
+
+
+def test_plot_lambda_metric_sweep_noop_on_empty_input(tmp_path):
+    out_path = tmp_path / "empty_sweep.png"
+    plot_lambda_metric_sweep([], out_path)
+    assert not out_path.exists()

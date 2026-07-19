@@ -169,6 +169,68 @@ up in one table (test accuracy, trainable params, lambda, freeze_interval) witho
 juggling. Rename whichever run(s) turn out worth keeping to a version-specific name per the
 "After a run" convention below before submitting another job that reuses the same `run_name`.
 
+## Overnight batch, 2026-07-19: ResNet50 sweep + ViT understanding probes
+
+New jobs, all cluster-config (40 epochs, `freeze_interval=7200`, seed=0), written after
+`docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md` §7 ("pistes d'amélioration"). Every
+job writes to its own flat `runs/<run_name>/` via a `run_name` config override, so all of them
+(plus the 7 already-completed runs) can be submitted together without collision.
+
+**ResNet50 λ/metric sweep (4 jobs)** -- unlike the ViT sweep above (a bug-fix hunt: the baseline
+over-froze 90.9% of params and lost 9.6 accuracy points), the ResNet50 baseline
+(`runs/resnet50_freeze/`) already retains 99.67% of accuracy at 67.2% of params frozen -- no known
+bug. The open question (`docs/2026-07-19_resnet50_cluster_run_curve_analysis.md` §7) is whether
+`lambda=-1.0` is near-optimal or just "not aggressive enough to hurt yet", so this sweep brackets
+the baseline on **both** sides instead of only retreating to a safer value:
+
+```bash
+sbatch slurm/train_resnet_sweep_lambda04.sh   # total_variation, λ=-0.4 (more aggressive)
+sbatch slurm/train_resnet_sweep_lambda07.sh   # total_variation, λ=-0.7 (more aggressive)
+sbatch slurm/train_resnet_sweep_lambda13.sh   # total_variation, λ=-1.3 (less aggressive, mirrors ViT's fix_lambda13)
+sbatch slurm/train_resnet_sweep_meanjs.sh     # mean_js, λ=-1.0 (metric swap, same λ as baseline)
+```
+
+**ViT understanding probes (2 jobs)** -- not bug fixes (those 3 already ran and are analyzed in
+the 5-experiments report); these extend the sweep to answer plan.md point 7's early-vs-late/
+attention question more directly:
+
+```bash
+sbatch slurm/train_vit_freeze_fix_meanjs_lambda13.sh  # combines the 2 best independent fixes: mean_js + λ=-1.3
+sbatch slurm/train_vit_freeze_fix_meanjs_lambda07.sh  # mean_js at λ=-0.7, brackets the already-run fix_meanjs (λ=-1.0)
+```
+
+Explicitly **not** launched (per direct instruction): a second-seed replicate of `lambda13` to
+check accuracy-parity-with-lambda16 isn't seed noise -- noted as a good idea in the report's §7
+but deliberately deferred past this batch.
+
+After they land, `python scripts/compare_runs.py` picks up every new run directly (globs
+`runs/*/summary.json`), and `python scripts/plot_sweep_summary.py <out.png> <nofreeze_dir>
+<freeze_dir> [<freeze_dir> ...]` renders the accuracy-vs-%retained comparison figure used for the
+ViT sweep (`runs/sweep_summaries/vit_lambda_metric_sweep.png`) -- rerun it with the ResNet50 dirs
+once this batch completes for the ResNet50 equivalent.
+
+## Plotting changes that apply automatically to every run in this batch
+
+`src/utils/plotting.py`'s `plot_metric_evolution` now takes two new optional args, both wired up
+in `src/train.py` for every run (no per-config opt-in needed):
+
+- `freeze_step`: a vertical marker at the one-shot freeze step, drawn on all 4 curated plots
+  (`fisher_drift`/`fisher_magnitude`/`grad_norm`/`relative_update`). Addresses report §4/§7: a
+  layer's `fisher_drift`/`fisher_magnitude` curve can jump right after this step purely because
+  the trainer's per-layer average drops out newly-frozen chunks (recomposing over fewer
+  survivors), not because the layer's own behavior changed -- the marker doesn't remove the
+  artifact, it flags the step so it isn't misread as a real acceleration.
+- `accuracy_history`: overlaid on `fisher_drift.png` only, on a right-hand twin axis, read back
+  from the run's own `train.log` (via the new `src/utils/logs.py`, no `trainer.py` change) --
+  makes the freeze-shock (report §2) visible directly against the drift curve in the same figure.
+
+Each run also now writes `metrics_plots/history.json` (raw per-step/per-chunk series) so a future
+plotting change can be applied with `python scripts/regenerate_plots.py runs/<run_name>` instead
+of re-training. **The 7 runs that already exist as of 2026-07-19 predate this** -- their raw
+history was never persisted (only the rendered PNGs), so they cannot be regenerated with the new
+marker/overlay without re-running training; this overnight batch's 6 new jobs are the first runs
+that will have it.
+
 ## After a run
 
 Per CLAUDE.md's "Running training" section: rename `runs/<model>_<freeze|nofreeze>/` to a

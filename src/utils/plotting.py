@@ -57,8 +57,29 @@ def plot_metric_evolution(
     metric_name: str,
     out_path: Path,
     log_scale_y: bool = False,
+    freeze_step: Optional[int] = None,
+    accuracy_history: Optional[List[Tuple[int, float]]] = None,
 ) -> None:
-    """One figure: x = iteration, y = metric_name, one line per layer."""
+    """One figure: x = iteration, y = metric_name, one line per layer.
+
+    freeze_step draws a vertical marker at the one-shot freeze decision step
+    (see CLAUDE.md/plan.md: freeze is a single trigger, not gradual) -- added
+    per docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §4/§7: a
+    layer's curve can jump right after this step purely because the
+    trainer's per-layer average is recomputed over a smaller surviving-chunk
+    group (frozen chunks are dropped, not zeroed), not because the layer's
+    own behavior actually changed. The marker doesn't fix the artifact
+    (still requires relative_update/grad_norm or the chunk_* plots to know
+    what's really frozen, see that report), it just flags the step so a
+    reader doesn't mistake post-marker jumps for a real acceleration. Silently
+    skipped if freeze_step falls outside the plotted step range (nofreeze
+    runs pass a freeze_step far beyond num_epochs*steps_per_epoch).
+
+    accuracy_history (val accuracy vs step, from the same run) overlays on a
+    right-hand twin axis -- lets a reader see the freeze-shock (report §2)
+    directly against the drift curve it's supposedly caused by, rather than
+    cross-referencing a separate epoch table.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -78,7 +99,31 @@ def plot_metric_evolution(
     ax.set_title(_METRIC_TITLES.get(metric_name, metric_name))
     if log_scale_y:
         ax.set_yscale("log")
-    ax.legend(fontsize=7, loc="best")
+
+    all_steps = [s for points in metric_history.values() for s, _ in points]
+    if accuracy_history:
+        all_steps += [s for s, _ in accuracy_history]
+    if freeze_step is not None and all_steps and min(all_steps) <= freeze_step <= max(all_steps):
+        ax.axvline(freeze_step, color="#52514e", linestyle=":", linewidth=1.3, zorder=0)
+        ax.text(
+            freeze_step, 1.0, " freeze", transform=ax.get_xaxis_transform(),
+            ha="left", va="top", fontsize=7, color="#52514e",
+        )
+
+    lines, labels = ax.get_legend_handles_labels()
+    if accuracy_history:
+        ax2 = ax.twinx()
+        acc_steps, acc_values = zip(*accuracy_history)
+        (acc_line,) = ax2.plot(
+            acc_steps, acc_values, color="#0b0b0b", linestyle="--", linewidth=1.8,
+            marker="s", markersize=3, label="Val accuracy (right axis)",
+        )
+        ax2.set_ylabel("Val accuracy")
+        ax2.set_ylim(0, 1)
+        lines += [acc_line]
+        labels += [acc_line.get_label()]
+
+    ax.legend(lines, labels, fontsize=7, loc="best")
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
@@ -346,6 +391,74 @@ def plot_drift_violin_by_group(
     ax.set_ylabel(value_label)
     ax.set_title(title)
     ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
+def plot_lambda_metric_sweep(
+    rows: List[Dict],
+    out_path: Path,
+    title: str = "Freeze sweep: accuracy vs. params retained",
+) -> None:
+    """Cross-run comparison for a chunk_selection_metric/js_variance_lambda
+    sweep (one point per completed run), modeled on the table in
+    docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §2/§7 --
+    x = % trainable params retained, y = accuracy relative to that sweep's
+    nofreeze baseline, marker shape = chunk_selection_metric, point label =
+    lambda. Unlike every other plot in this module this is metric-vs-metric
+    by necessity (it summarizes *runs*, not one run's iteration history) --
+    it answers a different question ("which config is worth keeping") than
+    the per-run curves, which is why it lives in its own function rather
+    than feeding plot_metric_evolution.
+
+    rows: list of dicts with keys label, lambda (float or None for
+    nofreeze), chunk_selection_metric, pct_retained (0-100),
+    accuracy_relative (0-100, vs. the sweep's own nofreeze run).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        return
+
+    metric_marker = {"total_variation": "o", "mean_js": "^", "nofreeze": "*"}
+    metric_color = {"total_variation": "#2a78d6", "mean_js": "#e87ba4", "nofreeze": "#52514e"}
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    seen_metrics = []
+    for row in rows:
+        metric = row.get("chunk_selection_metric") or "nofreeze"
+        if metric not in seen_metrics:
+            seen_metrics.append(metric)
+        ax.scatter(
+            row["pct_retained"], row["accuracy_relative"],
+            marker=metric_marker.get(metric, "o"), color=metric_color.get(metric, "#2a78d6"),
+            s=70, zorder=3,
+        )
+        lam = row.get("lambda")
+        point_label = row["label"] if lam is None else f"{row['label']}\n(λ={lam:g})"
+        ax.annotate(
+            point_label, (row["pct_retained"], row["accuracy_relative"]),
+            textcoords="offset points", xytext=(6, 6), fontsize=7,
+        )
+
+    ax.axhline(100.0, color="#52514e", linestyle=":", linewidth=1, zorder=0)
+    ax.set_xlabel("Trainable params retained (%)")
+    ax.set_ylabel("Test accuracy relative to nofreeze (%)")
+    ax.set_title(title)
+    ax.grid(alpha=0.3)
+
+    from matplotlib.lines import Line2D
+    handles = [
+        Line2D([0], [0], marker=metric_marker.get(m, "o"), color=metric_color.get(m, "#2a78d6"),
+               linestyle="", markersize=8, label=m)
+        for m in seen_metrics
+    ]
+    ax.legend(handles=handles, fontsize=8, loc="best")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
