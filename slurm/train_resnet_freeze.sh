@@ -7,15 +7,15 @@
 # caveat; treat this run's freeze-vs-nofreeze gap as a first real result,
 # not a re-confirmation of the ViT finding.
 
-#SBATCH --account=def-CHANGEME
+#SBATCH --account=rrg-msh
 #SBATCH --job-name=resnet_freeze
 #SBATCH --gpus-per-node=h100:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=03:00:00
 #SBATCH --output=slurm/logs/%x-%j.out
-# #SBATCH --mail-user=you@example.com
-# #SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=bao.lugherini@student-cs.fr
+#SBATCH --mail-type=END,FAIL
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
