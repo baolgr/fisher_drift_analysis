@@ -9,9 +9,12 @@ Verified 2026-07-19 against the actual `docs.alliancecan.ca` "Running jobs" / Fi
 GPU-scheduling pages (the user fetched the content directly after an automated fetch got
 bot-blocked earlier the same session — two real corrections came out of that: `--gres=gpu:...`
 is being phased out in favour of `--gpus-per-node=...`, and `--mem=0` was wrong for a
-single-GPU-of-4 request on a shared node, see below). Everything else not cited to a specific
-page below is still general SLURM knowledge, not a direct quote -- worth a skim of the docs
-yourself before your very first submission regardless.
+single-GPU-of-4 request on a shared node, see below). The module load line was additionally
+verified live on Rorqual via `module spider` (two more real corrections: `python/3.11` doesn't
+exist as a bare version, needs the full `python/3.11.5`; `cuda/12.6` needs an explicit compiler
+prerequisite the original draft didn't have) -- see "What the scripts request" below for the
+full trail. Everything else not cited to a specific page/command below is still general SLURM
+knowledge, not a direct quote.
 
 ## Before your first submission
 
@@ -98,10 +101,20 @@ metrics_plots/*.png -- now including the 3 new Appendix-B.1-style plots, see
 - **`module purge` before loading modules**: matches the docs' troubleshooting guidance
   directly ("il est donc recommandé d'ajouter au script la ligne module purge avant le
   chargement des modules... pour faire en sorte que les tâches soient soumises de manière
-  uniforme"). Exact module names/versions (`StdEnv/2023`, `python/3.11`, `cuda/12.2`) were
-  **not** confirmed against the fetched pages (those cover job submission and hardware, not the
-  software module tree) -- run `module spider python` / `module avail cuda` on whichever
-  cluster you land on and adjust if these have moved on.
+  uniforme").
+- **`module load StdEnv/2023 gcc/13.3 cuda/12.6 python/3.11.5`**: fully verified on Rorqual
+  2026-07-19 via `module spider python/3.11.5` and `module spider cuda/12.6` (not guessed --
+  the first two attempts were wrong: `python/3.11` doesn't exist as a bare version, and
+  `cuda/12.2` exists but needs a compiler prerequisite that wasn't in the original draft
+  either). `gcc/13.3` is one of several valid non-MPI compiler choices `cuda/12.6` accepts
+  (`gcc/12.3`, `gcc/13.3`, `intel/2023.2.1`, `nvhpc/25.1`, each also available with an
+  `openmpi` variant) -- picked arbitrarily since this job is single-process (no MPI code
+  anywhere in this project) and only ever consumes prebuilt wheels via pip, never compiles
+  anything itself, so the specific compiler shouldn't matter. `scipy-stack` was dropped from
+  the original draft -- redundant with what `pip install --no-index -r requirements.txt`
+  already provides (numpy/matplotlib are in `requirements.txt`). If you land on Fir or Nibi
+  instead of Rorqual, these exact versions aren't re-verified there -- rerun the two `module
+  spider` commands above and adjust if they differ.
 - **`virtualenv --no-download` + `pip install --no-index` in `$SLURM_TMPDIR`, not conda**: this
   part is carried over from earlier web-search-confirmed research this session, not re-verified
   against the pages just fetched (which didn't cover Python/package-manager setup). Still
