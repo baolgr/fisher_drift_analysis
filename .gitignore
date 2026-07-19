@@ -9,7 +9,7 @@ dataset/
 # regenerable by re-running the config in runs/<name>/summary.json. Everything
 # else under runs/ (summary.json, train.log, metrics_plots/*.png) stays tracked --
 # that's the actual experiment record, not a build artifact.
-runs/*/checkpoints/
+runs/
 
 # SLURM job output (see slurm/README.md) -- one file per job submission;
 # keep the directory itself (via slurm/logs/.gitkeep) since sbatch needs
