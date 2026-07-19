@@ -2,6 +2,10 @@
 # never vendor it into this repo. See CLAUDE.md's "Hard rule".
 FisherAdapTune/
 
+# Project instructions for Claude Code -- untracked from GitHub and purged from
+# history 2026-07-19 (repo is public). Stays on disk, read locally each session.
+CLAUDE.md
+
 # CIFAR-10 data -- large (~340M), re-downloadable via torchvision, not source.
 dataset/
 
