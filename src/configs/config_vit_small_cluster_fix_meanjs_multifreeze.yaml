@@ -1,0 +1,68 @@
+# CIFAR-10 benchmark config -- small ViT, cluster variant, MULTI-FREEZE
+# variant of the qualitatively richest ViT fix
+# (config_vit_small_cluster_fix_meanjs.yaml: mean_js, js_variance_lambda=-1.0,
+# 97.55% accuracy relative to nofreeze at 48.9% params retained -- the only
+# config that freezes attention with an early-vs-late split, see
+# docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §3 point 2/§6
+# point 3). Kept as ViT's second "most promising" config over the combined
+# fix (mean_js+lambda=-1.3) precisely because
+# docs/2026-07-20_overnight_batch_analysis.md §3 found that combination
+# loses this attention selectivity entirely (36->0 Attn chunks frozen) --
+# this multi-freeze run tests whether the same selectivity survives 3
+# progressive freeze events instead of 1, which the combined-fix single-event
+# run already showed a bare lambda change does not preserve.
+#
+# Same reasoning as
+# config_resnet50_cluster_sweep_lambda13_multifreeze.yaml's header (read
+# that first): freeze_interval 7200 -> 4000 for 3 freeze events (steps
+# 4000/8000/12000) within the unchanged 40-epoch/14040-step budget.
+#
+# Risk assessed before submitting: single-event ancestor froze 76/408=18.6%
+# of chunks in one shot -- extrapolated 3x on the shrinking pool:
+# 408*(1-0.186)^3=220 chunks retained (~54%), the largest cumulative
+# reduction of the 4 multi-freeze configs in this batch (single-event was
+# 332 retained, 81.4%). Still well short of the compounding collapse-to-
+# near-zero failure mode in the fisheradaptune_freeze_collapse_bug memory,
+# but the most uncertain projection here -- check the real [Freeze] print
+# lines and chunk_drift_violin_by_param_type.png after this run.
+#
+# run_name -> runs/vit_small_freeze_fix_meanjs_multifreeze/ (does not
+# overwrite runs/vit_small_freeze_fix_meanjs/, the single-event run this is
+# compared against).
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Model
+vit:
+  patch_size: 4
+  embed_dim: 192
+  depth: 6
+  num_heads: 3
+  mlp_ratio: 4.0
+  drop: 0.1
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+run_name: vit_small_freeze_fix_meanjs_multifreeze
+
+# Fisher / freeze -- freeze_interval lowered from 7200 to 4000 for 3 freeze
+# events instead of 1 (see header). chunk_selection_metric/js_variance_lambda
+# unchanged from config_vit_small_cluster_fix_meanjs.yaml.
+fisher_ema_interval: 200
+freeze_interval: 4000
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: mean_js
+js_variance_lambda: -1.0
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

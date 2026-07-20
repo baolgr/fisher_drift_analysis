@@ -1,0 +1,64 @@
+# CIFAR-10 benchmark config -- ResNet50, cluster variant, MULTI-FREEZE variant
+# of the most promising sweep run (config_resnet50_cluster_sweep_lambda13.yaml:
+# total_variation, js_variance_lambda=-1.3, 101.02% accuracy relative to
+# nofreeze at 71.9% params retained -- see
+# docs/2026-07-20_overnight_batch_analysis.md §2/§5 point 2).
+#
+# Every run so far (this config's single-event ancestor included) has
+# freeze_interval set to roughly half of total_steps specifically so the
+# one-shot freeze trigger (self._total_steps % freeze_interval == 0) only
+# ever fires ONCE -- deliberate for isolating "what does freezing do" from
+# "what does progressive freezing do" (see CLAUDE.md/plan.md). This config
+# switches to the latter: freeze_interval 7200 -> 4000 gives 3 freeze events
+# within the same 40-epoch/14040-step budget (steps 4000, 8000, 12000 --
+# confirmed steps_per_epoch=351 via build_dataloaders, unchanged from the
+# base config), each ~11.4 epochs apart, leaving ~5.8 epochs (2040 steps)
+# after the last event to observe recovery before training ends. num_epochs
+# is NOT increased (stays 40, same wall-clock budget as every prior cluster
+# run) -- chosen over lengthening the schedule given the 2026-07-21 deadline
+# is the next day: a shorter freeze_interval gets multiple freeze events
+# without risking a run that doesn't finish in time.
+#
+# Risk assessed before submitting, not fully verified (extrapolated from the
+# single-event run's frozen fraction, 85/644=13.2% of chunks in one shot):
+# repeating that fraction on the shrinking trainable pool 3x projects to
+# roughly 644*(1-0.132)^3=421 chunks retained (~65%) -- a real reduction from
+# the single-event 71.9%, but nowhere near the compounding collapse-to-
+# near-zero failure mode documented in the fisheradaptune_freeze_collapse_bug
+# memory (that one combined a much shorter interval, ~24 events, with a
+# differently-signed/miscalibrated lambda). Worth checking the actual
+# [Freeze] print lines after this run regardless -- extrapolation from one
+# data point is not a guarantee the per-event fraction stays constant as the
+# pool composition changes.
+#
+# run_name -> runs/resnet50_freeze_sweep_lambda13_multifreeze/ (does not
+# overwrite runs/resnet50_freeze_sweep_lambda13/, the single-event run this
+# is compared against).
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+run_name: resnet50_freeze_sweep_lambda13_multifreeze
+
+# Fisher / freeze -- freeze_interval lowered from 7200 to 4000 for 3 freeze
+# events instead of 1 (see header). chunk_selection_metric/js_variance_lambda
+# unchanged from config_resnet50_cluster_sweep_lambda13.yaml.
+fisher_ema_interval: 200
+freeze_interval: 4000
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: total_variation
+js_variance_lambda: -1.3
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

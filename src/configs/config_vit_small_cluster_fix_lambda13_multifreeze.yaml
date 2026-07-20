@@ -1,0 +1,61 @@
+# CIFAR-10 benchmark config -- small ViT, cluster variant, MULTI-FREEZE
+# variant of the best ViT fix (config_vit_small_cluster_fix_lambda13.yaml:
+# total_variation, js_variance_lambda=-1.3, 99.17% accuracy relative to
+# nofreeze at 66.7% params retained -- the recommended compromise per
+# docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §6 point 2).
+#
+# Same reasoning as
+# config_resnet50_cluster_sweep_lambda13_multifreeze.yaml's header (read
+# that first): freeze_interval 7200 -> 4000 gives 3 freeze events (steps
+# 4000/8000/12000) within the unchanged 40-epoch/14040-step budget
+# (steps_per_epoch=351, identical to ResNet50 -- same batch_size/dataset).
+# num_epochs not increased, same reasoning (2026-07-21 deadline).
+#
+# Risk assessed before submitting: single-event ancestor froze 24/408=5.9%
+# of chunks in one shot -- the mildest of the 4 multi-freeze configs in this
+# batch. Extrapolated 3x on the shrinking pool: 408*(1-0.059)^3=340 chunks
+# retained (~83%), a modest cumulative reduction from the single-event 384
+# (94.1%). Lowest compounding-collapse risk of the 4 configs submitted
+# tonight; still worth checking the real [Freeze] print lines rather than
+# trusting the projection, per the fisheradaptune_freeze_collapse_bug memory.
+#
+# run_name -> runs/vit_small_freeze_fix_lambda13_multifreeze/ (does not
+# overwrite runs/vit_small_freeze_fix_lambda13/, the single-event run this is
+# compared against).
+
+# Data
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 6
+
+# Model
+vit:
+  patch_size: 4
+  embed_dim: 192
+  depth: 6
+  num_heads: 3
+  mlp_ratio: 4.0
+  drop: 0.1
+
+# Training
+num_epochs: 40
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+run_name: vit_small_freeze_fix_lambda13_multifreeze
+
+# Fisher / freeze -- freeze_interval lowered from 7200 to 4000 for 3 freeze
+# events instead of 1 (see header). chunk_selection_metric/js_variance_lambda
+# unchanged from config_vit_small_cluster_fix_lambda13.yaml.
+fisher_ema_interval: 200
+freeze_interval: 4000
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: total_variation
+js_variance_lambda: -1.3
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR10

@@ -209,6 +209,46 @@ After they land, `python scripts/compare_runs.py` picks up every new run directl
 ViT sweep (`runs/sweep_summaries/vit_lambda_metric_sweep.png`) -- rerun it with the ResNet50 dirs
 once this batch completes for the ResNet50 equivalent.
 
+## Multi-freeze batch, 2026-07-20: 3 progressive freeze events instead of 1
+
+Every run so far -- including all 12 in the overnight batch above -- deliberately sets
+`freeze_interval` to roughly half of `total_steps` so the one-shot freeze trigger
+(`self._total_steps % freeze_interval == 0` in `src/fisher/trainer.py`) only ever fires **once**,
+isolating "what does freezing do" from "what does *progressive* freezing do" (the paper's actual
+premise -- see `docs/plan.md`). Following up on
+`docs/2026-07-20_overnight_batch_analysis.md`, this batch picks the 2 most promising freeze
+configs per model from the 12 already run and re-launches them with `freeze_interval: 7200 ->
+4000` (3 events at steps 4000/8000/12000, `num_epochs` unchanged at 40 -- steps_per_epoch=351 for
+both models, confirmed via `build_dataloaders`) instead of a longer schedule, specifically to keep
+wall-clock time unchanged given the 2026-07-21 deadline is the next day. The 2 already-completed
+`nofreeze` baselines (`runs/vit_small_nofreeze/`, `runs/resnet50_nofreeze/`) are reused as-is --
+`nofreeze` doesn't depend on `freeze_interval` at all, so no need to re-run them.
+
+```bash
+sbatch slurm/train_resnet_sweep_lambda13_multifreeze.sh   # ResNet50, total_variation, λ=-1.3 (best accuracy: 101.02% relative)
+sbatch slurm/train_resnet_sweep_meanjs_multifreeze.sh     # ResNet50, mean_js, λ=-1.0 (best freeze/accuracy compromise: 99.93% relative)
+sbatch slurm/train_vit_freeze_fix_lambda13_multifreeze.sh # ViT, total_variation, λ=-1.3 (best accuracy: 99.17% relative)
+sbatch slurm/train_vit_freeze_fix_meanjs_multifreeze.sh   # ViT, mean_js, λ=-1.0 (attention-selective, qualitatively richest: 97.55% relative)
+```
+
+**Why these 4 and not the others**: `resnet50_freeze_sweep_lambda04` and
+`vit_small_freeze_fix_meanjs_lambda07` are excluded outright -- both already collapsed
+catastrophically as single-event runs (see the overnight analysis §2/§3), running them 3x
+progressively would only compound that. `resnet50_freeze` (the original λ=-1.0 baseline) and
+`vit_small_freeze_fix_meanjs_lambda13` (the combined fix) are excluded because each is strictly
+dominated by one of the 4 configs kept: `lambda13` beats the λ=-1.0 baseline on both models, and
+`meanjs` alone already does everything the combined fix does except *worse* (the combined fix's
+only distinguishing feature -- attention selectivity -- turned out not to survive, per the
+overnight analysis §3), so re-running it progressively wouldn't test a new hypothesis.
+
+**Risk, assessed but not verified** (each config's own header has the specific numbers): repeating
+a single-event freeze fraction 3x on the shrinking trainable pool is a rough extrapolation, not a
+guarantee -- the `fisheradaptune_freeze_collapse_bug` memory documents a real prior case of
+freeze fractions compounding into near-total collapse under repeated events. All 4 projections
+here land well short of that failure mode (mildest: ViT `lambda13` ~83% chunks retained after 3
+events; most aggressive: ResNet50 `meanjs` ~40% retained), but check each run's `[Freeze]` print
+lines and `relative_update.png` once it lands rather than trusting the projection.
+
 ## Re-running the most interesting existing runs to pick up the new plots
 
 The 7 runs completed before 2026-07-19 can't be regenerated in place (no raw history was
