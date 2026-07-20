@@ -171,17 +171,29 @@ def test_plot_metric_evolution_renders_with_freeze_marker_and_accuracy_overlay(t
     accuracy_history = [(i * 200, 0.4 + 0.02 * i) for i in range(5)]
     out_path = tmp_path / "fisher_drift.png"
     plot_metric_evolution(
-        history, "fisher_drift", out_path, freeze_step=500, accuracy_history=accuracy_history
+        history, "fisher_drift", out_path, freeze_steps=[500], accuracy_history=accuracy_history
     )
     assert out_path.exists() and out_path.stat().st_size > 0
 
 
-def test_plot_metric_evolution_skips_freeze_marker_out_of_range(tmp_path):
-    # --disable-freeze passes freeze_interval far past the last plotted step
-    # (see src/train.py) -- must not raise or draw a marker off the axis.
+def test_plot_metric_evolution_renders_with_multiple_freeze_markers(tmp_path):
+    # Multi-freeze configs (freeze_interval lowered, added 2026-07-20) fire
+    # the threshold trigger more than once per run -- every marker must
+    # appear, not just the first (this is exactly the gap found when
+    # analyzing runs/vit_small_freeze_fix_meanjs_multifreeze/, whose 2nd,
+    # much larger freeze event was invisible with a single freeze_step).
     history = {"layer.a": [(i * 100, 0.1 * i) for i in range(10)]}
     out_path = tmp_path / "fisher_drift.png"
-    plot_metric_evolution(history, "fisher_drift", out_path, freeze_step=10**9)
+    plot_metric_evolution(history, "fisher_drift", out_path, freeze_steps=[300, 600, 900])
+    assert out_path.exists() and out_path.stat().st_size > 0
+
+
+def test_plot_metric_evolution_skips_freeze_markers_out_of_range(tmp_path):
+    # --disable-freeze runs have no freeze events at all (empty list) -- must
+    # not raise or draw a marker off the axis.
+    history = {"layer.a": [(i * 100, 0.1 * i) for i in range(10)]}
+    out_path = tmp_path / "fisher_drift.png"
+    plot_metric_evolution(history, "fisher_drift", out_path, freeze_steps=[])
     assert out_path.exists() and out_path.stat().st_size > 0
 
 

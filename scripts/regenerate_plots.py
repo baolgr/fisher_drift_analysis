@@ -18,9 +18,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from src.data.dataset import build_dataloaders
 from src.fisher.fisher_core import build_all_chunk_specs, index_param_to_module
 from src.train import _DEPTH_GROUP_ORDER, _PARAM_TYPE_GROUP_ORDER, build_model
 from src.utils.layers import classify_depth_group, classify_param_type, resolve_chunk_layer_and_block
+from src.utils.logs import parse_freeze_steps, parse_val_accuracy_history
 from src.utils.plotting import (
     plot_all_metrics_grid,
     plot_chunk_drift_heatmap,
@@ -41,8 +43,6 @@ def regenerate(run_dir: Path) -> None:
     history = json.loads(history_path.read_text())
     cfg = json.loads(summary_path.read_text())["config"]
     model_name = history["model"]
-    freeze_step = history["freeze_step"]
-    accuracy_history = [tuple(p) for p in history["accuracy_history"]]
     all_metrics = {
         metric: {label: [tuple(p) for p in points] for label, points in layers.items()}
         for metric, layers in history["metrics"].items()
@@ -50,10 +50,19 @@ def regenerate(run_dir: Path) -> None:
     chunk_js_history = {k: [tuple(p) for p in v] for k, v in history["chunk_js_history"].items()}
     chunk_to_class = history["chunk_to_class"]
 
+    # Re-parsed from train.log rather than trusted from history.json: a run
+    # completed before the 2026-07-20 multi-freeze fix stored a single
+    # "freeze_step" (=freeze_interval, wrong for >1 event -- see
+    # src/utils/plotting.py's docstring), and train.log is the one place
+    # that's unambiguous about which freeze events actually fired.
+    steps_per_epoch = len(build_dataloaders(cfg)[0])
+    accuracy_history = parse_val_accuracy_history(run_dir / "train.log", steps_per_epoch)
+    freeze_steps = parse_freeze_steps(run_dir / "train.log")
+
     for metric_name, metric_history in all_metrics.items():
         plot_metric_evolution(
             metric_history, metric_name, metrics_dir / f"{metric_name}.png",
-            freeze_step=freeze_step,
+            freeze_steps=freeze_steps,
             accuracy_history=accuracy_history if metric_name == "fisher_drift" else None,
         )
     plot_all_metrics_grid(all_metrics, metrics_dir / "all_metrics_grid.png")

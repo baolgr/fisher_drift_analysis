@@ -57,23 +57,32 @@ def plot_metric_evolution(
     metric_name: str,
     out_path: Path,
     log_scale_y: bool = False,
-    freeze_step: Optional[int] = None,
+    freeze_steps: Optional[List[int]] = None,
     accuracy_history: Optional[List[Tuple[int, float]]] = None,
 ) -> None:
     """One figure: x = iteration, y = metric_name, one line per layer.
 
-    freeze_step draws a vertical marker at the one-shot freeze decision step
-    (see CLAUDE.md/plan.md: freeze is a single trigger, not gradual) -- added
-    per docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §4/§7: a
-    layer's curve can jump right after this step purely because the
+    freeze_steps draws a vertical marker at each freeze decision step actually
+    taken -- originally every run had exactly one (see CLAUDE.md/plan.md:
+    freeze was a single trigger, not gradual), but 2026-07-20 added
+    multi-freeze configs (freeze_interval lowered so freeze fires 3x). A
+    single freeze_step here would silently mislabel a 3-event run as
+    one-shot -- e.g. runs/vit_small_freeze_fix_meanjs_multifreeze/ has a
+    second, much larger freeze event at step 8000 that a lone step-4000
+    marker would leave completely unflagged. One marker per element of
+    freeze_steps instead, only the first labeled "freeze" (repeating the
+    text label at 2-3 close-together lines clutters more than it clarifies;
+    the dotted line itself is the signal). Addresses
+    docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md §4/§7: a
+    layer's curve can jump right after any of these steps purely because the
     trainer's per-layer average is recomputed over a smaller surviving-chunk
     group (frozen chunks are dropped, not zeroed), not because the layer's
     own behavior actually changed. The marker doesn't fix the artifact
     (still requires relative_update/grad_norm or the chunk_* plots to know
     what's really frozen, see that report), it just flags the step so a
-    reader doesn't mistake post-marker jumps for a real acceleration. Silently
-    skipped if freeze_step falls outside the plotted step range (nofreeze
-    runs pass a freeze_step far beyond num_epochs*steps_per_epoch).
+    reader doesn't mistake post-marker jumps for a real acceleration. Each
+    step is silently skipped if it falls outside the plotted step range
+    (nofreeze runs pass an empty list -- freeze_interval never fires).
 
     accuracy_history (val accuracy vs step, from the same run) overlays on a
     right-hand twin axis -- lets a reader see the freeze-shock (report §2)
@@ -103,12 +112,17 @@ def plot_metric_evolution(
     all_steps = [s for points in metric_history.values() for s, _ in points]
     if accuracy_history:
         all_steps += [s for s, _ in accuracy_history]
-    if freeze_step is not None and all_steps and min(all_steps) <= freeze_step <= max(all_steps):
-        ax.axvline(freeze_step, color="#52514e", linestyle=":", linewidth=1.3, zorder=0)
-        ax.text(
-            freeze_step, 1.0, " freeze", transform=ax.get_xaxis_transform(),
-            ha="left", va="top", fontsize=7, color="#52514e",
-        )
+    if freeze_steps and all_steps:
+        lo, hi = min(all_steps), max(all_steps)
+        for i, step in enumerate(freeze_steps):
+            if not (lo <= step <= hi):
+                continue
+            ax.axvline(step, color="#52514e", linestyle=":", linewidth=1.3, zorder=0)
+            if i == 0:
+                ax.text(
+                    step, 1.0, " freeze", transform=ax.get_xaxis_transform(),
+                    ha="left", va="top", fontsize=7, color="#52514e",
+                )
 
     lines, labels = ax.get_legend_handles_labels()
     if accuracy_history:

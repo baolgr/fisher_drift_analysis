@@ -36,7 +36,7 @@ from src.utils.layers import (
     resolve_chunk_layer_and_block,
     resolve_layer_chunk_keys,
 )
-from src.utils.logs import parse_val_accuracy_history
+from src.utils.logs import parse_freeze_steps, parse_val_accuracy_history
 from src.utils.metrics import LayerMetricRecorder
 from src.utils.plotting import (
     plot_all_metrics_grid,
@@ -280,16 +280,19 @@ def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: 
 
     metrics_dir = output_dir / "metrics_plots"
     all_metrics = recorder.as_dict()
-    # freeze is a single one-shot trigger (see CLAUDE.md/plan.md), so the
-    # step it fires at is exactly freeze_interval -- with --disable-freeze
-    # that's num_epochs*steps_per_epoch+1, past every plotted step, so the
-    # marker is silently skipped by plot_metric_evolution rather than
-    # needing a separate None-vs-value branch here.
+    # Multi-freeze configs (freeze_interval lowered so the threshold trigger
+    # fires more than once, added 2026-07-20 -- see slurm/README.md's
+    # "Multi-freeze batch" section) mean freeze_interval alone no longer
+    # identifies every event, and early stopping can cut a run short before
+    # a later planned event ever fires -- read back the actual "[Freeze]
+    # Step N: ..." lines from train.log instead of computing multiples of
+    # freeze_interval from config.
     accuracy_history = parse_val_accuracy_history(output_dir / "train.log", steps_per_epoch)
+    freeze_steps = parse_freeze_steps(output_dir / "train.log")
     for metric_name, metric_history in all_metrics.items():
         plot_metric_evolution(
             metric_history, metric_name, metrics_dir / f"{metric_name}.png",
-            freeze_step=freeze_interval,
+            freeze_steps=freeze_steps,
             # Overlay directly on fisher_drift.png only (report §7): that's
             # the one figure §4 shows can look like a real behavior change
             # right at the freeze step when it's actually a mean-recomposition
@@ -307,7 +310,7 @@ def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: 
         json.dump(
             {
                 "model": model_name,
-                "freeze_step": freeze_interval,
+                "freeze_steps": freeze_steps,
                 "accuracy_history": accuracy_history,
                 "metrics": all_metrics,
                 "chunk_js_history": trainer._chunk_js_history,

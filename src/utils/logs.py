@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 _EPOCH_RE = re.compile(r"Epoch (\d+)/(\d+): train_loss=[\d.]+\s+loss=[\d.]+\s+accuracy=([\d.]+)")
+_FREEZE_STEP_RE = re.compile(r"\[Freeze\] Step (\d+): (?:variation|mean_js) mean=")
 
 
 def parse_val_accuracy_history(log_path: Path, steps_per_epoch: int) -> List[Tuple[int, float]]:
@@ -36,3 +37,28 @@ def parse_val_accuracy_history(log_path: Path, steps_per_epoch: int) -> List[Tup
             accuracy = float(m.group(3))
             points.append((epoch * steps_per_epoch, accuracy))
     return points
+
+
+def parse_freeze_steps(log_path: Path) -> List[int]:
+    """Steps at which a threshold-based freeze decision actually fired.
+
+    Reads back the trainer's own "[Freeze] Step N: variation ..." / "...
+    mean_js ..." print lines rather than computing multiples of
+    freeze_interval from config -- config alone can't tell whether a later
+    planned event was ever reached (early stopping can end the run first,
+    as in runs/vit_small_freeze_fix_meanjs_multifreeze/, which never got to
+    its 3rd planned event at step 12000). Excludes the separate one-time
+    "Step 0 zero-Fisher freeze" line (a different, unconditional mechanism,
+    not the js_variance_lambda threshold this marker is about -- see
+    CLAUDE.md). Returns [] if log_path doesn't exist, same as
+    parse_val_accuracy_history.
+    """
+    log_path = Path(log_path)
+    if not log_path.exists():
+        return []
+    steps = []
+    for line in log_path.read_text().splitlines():
+        m = _FREEZE_STEP_RE.search(line)
+        if m:
+            steps.append(int(m.group(1)))
+    return steps
