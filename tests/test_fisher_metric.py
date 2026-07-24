@@ -271,6 +271,67 @@ def test_relative_update_zero_on_first_call_then_positive(dummy_cifar_batch):
     assert second_update > 0.0
 
 
+@pytest.mark.parametrize(
+    "build_model,registry",
+    [
+        (build_resnet50_cifar, RESNET50_CIFAR_LAYERS),
+        (build_vit_small_cifar, VIT_SMALL_LAYERS),
+    ],
+)
+def test_recorder_raw_grads_match_layer_param_count(build_model, registry, dummy_cifar_batch):
+    model = build_model()
+    images, labels = dummy_cifar_batch
+    logits = model(images)
+    loss = torch.nn.functional.cross_entropy(logits, labels)
+    loss.backward()
+
+    param_to_modinfo = index_param_to_module(model)
+    chunk_specs_by_param, _ = build_all_chunk_specs(
+        model, param_to_modinfo, slice_blocks=4, slice_mode="row"
+    )
+    recorder = LayerMetricRecorder(model, registry, chunk_specs_by_param)
+    fake_trainer = _FakeTrainer(chunk_specs_by_param)
+    recorder(step=0, model=model, trainer=fake_trainer)
+    recorder(step=5, model=model, trainer=fake_trainer)
+
+    raw_grads = recorder.as_raw_grads()
+    assert set(raw_grads.keys()) == set(registry.keys())
+    for label, layer_path in registry.items():
+        module = model.get_submodule(layer_path)
+        expected_numel = sum(p.numel() for p in module.parameters(recurse=False))
+        entry = raw_grads[label]
+        assert entry["steps"] == [0, 5]
+        assert entry["grads"].shape == (2, expected_numel)
+        assert torch.isfinite(entry["grads"]).all()
+
+
+def test_recorder_chunk_fisher_magnitude_history_covers_full_population(dummy_cifar_batch):
+    model = build_resnet50_cifar()
+    images, labels = dummy_cifar_batch
+    logits = model(images)
+    loss = torch.nn.functional.cross_entropy(logits, labels)
+    loss.backward()
+
+    param_to_modinfo = index_param_to_module(model)
+    chunk_specs_by_param, _ = build_all_chunk_specs(
+        model, param_to_modinfo, slice_blocks=4, slice_mode="row"
+    )
+    all_chunk_keys = {spec.key for specs in chunk_specs_by_param.values() for spec in specs}
+    recorder = LayerMetricRecorder(model, RESNET50_CIFAR_LAYERS, chunk_specs_by_param)
+    fake_trainer = _FakeTrainer(chunk_specs_by_param)
+    recorder(step=0, model=model, trainer=fake_trainer)
+    recorder(step=1, model=model, trainer=fake_trainer)
+
+    magnitude_history = recorder.as_chunk_fisher_magnitude_history()
+    # Full chunk population, not just the 7 curated RESNET50_CIFAR_LAYERS --
+    # that's the whole point of tracking this separately from fisher_magnitude.
+    assert set(magnitude_history.keys()) == all_chunk_keys
+    for key, points in magnitude_history.items():
+        assert len(points) == 2
+        for step, value in points:
+            assert np.isfinite(value), f"chunk {key} has non-finite magnitude"
+
+
 def test_grad_norm_matches_manual_computation(dummy_cifar_batch):
     model = build_resnet50_cifar()
     images, labels = dummy_cifar_batch

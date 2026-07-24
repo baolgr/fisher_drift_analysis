@@ -332,6 +332,11 @@ def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: 
     # Raw per-step/per-chunk history, so a future plotting-code change can
     # regenerate every PNG above from this run without re-training --
     # metrics_plots/*.png alone don't carry the underlying series back out.
+    # chunk_fisher_magnitude_history + raw_grads_file extend this to metrics
+    # that don't exist in this repo yet (Fisher-based or gradient-geometry-
+    # based, e.g. loss-space orthogonality) -- see metrics.py's module
+    # docstring for why raw gradients live in a separate .pt rather than here.
+    torch.save(recorder.as_raw_grads(), metrics_dir / "raw_grads.pt")
     with open(metrics_dir / "history.json", "w") as f:
         json.dump(
             {
@@ -341,6 +346,8 @@ def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: 
                 "metrics": all_metrics,
                 "chunk_js_history": trainer._chunk_js_history,
                 "chunk_to_class": trainer._chunk_to_class,
+                "chunk_fisher_magnitude_history": recorder.as_chunk_fisher_magnitude_history(),
+                "raw_grads_file": "raw_grads.pt",
             },
             f,
         )

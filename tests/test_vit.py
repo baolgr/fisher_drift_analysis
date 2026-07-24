@@ -1,11 +1,14 @@
 """Tests specific to ViTCIFAR / build_vit_small_cifar."""
 
+import json
+
 import torch
 import torch.nn as nn
 import pytest
 
 from src.fisher.adafisher import AdaFisherBackbone
 from src.models.vit_cifar import build_vit_small_cifar
+from src.utils.layers import VIT_SMALL_LAYERS
 
 from conftest import make_synthetic_dataloaders
 
@@ -93,3 +96,14 @@ def test_train_smoke(monkeypatch, disable_freeze, tmp_path):
         png = plots_dir / f"{name}.png"
         assert png.exists() and png.stat().st_size > 0
     assert (run_dir / "summary.json").exists()
+
+    with open(plots_dir / "history.json") as f:
+        history = json.load(f)
+    assert history["raw_grads_file"] == "raw_grads.pt"
+    assert set(history["chunk_fisher_magnitude_history"].keys())
+
+    raw_grads = torch.load(plots_dir / "raw_grads.pt", weights_only=False)
+    assert set(raw_grads.keys()) == set(VIT_SMALL_LAYERS.keys())
+    for entry in raw_grads.values():
+        assert entry["grads"].shape[0] == len(entry["steps"])
+        assert entry["grads"].shape[0] > 0
