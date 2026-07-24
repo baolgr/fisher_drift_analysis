@@ -7,7 +7,7 @@ src/train.py alongside this script; runs completed before that change have
 no raw per-step history anywhere on disk -- only the already-rendered PNGs
 -- so they cannot be regenerated this way and must be re-run instead).
 
-Usage: python scripts/regenerate_plots.py runs/<run_name> [runs/<run_name> ...]
+Usage: python scripts/regenerate_plots.py runs/<Dataset>/<Model>/<run_name> [...]
 """
 
 import json

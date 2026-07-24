@@ -84,7 +84,7 @@ def test_train_smoke(monkeypatch, disable_freeze, tmp_path):
     else:
         assert summary["trainable_params"] < summary["total_params"]
 
-    run_dir = tmp_path / f"vit_small_{'nofreeze' if disable_freeze else 'freeze'}"
+    run_dir = tmp_path / "CIFAR-10" / "ViT_Small" / f"vit_small_{'nofreeze' if disable_freeze else 'freeze'}"
     plots_dir = run_dir / "metrics_plots"
     for name in (
         "fisher_drift", "fisher_magnitude", "grad_norm", "relative_update", "all_metrics_grid",

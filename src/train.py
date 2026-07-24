@@ -1,5 +1,7 @@
-"""Single parametrized training entrypoint for the CIFAR-10 FisherAdapTune
-benchmark (ResNet50 and ViT-small share one script -- see plan for why).
+"""Single parametrized training entrypoint for the FisherAdapTune benchmark
+(ResNet50 and ViT-small share one script -- see plan for why). Dataset is
+config-driven (cfg["dataset"], see src/data/dataset.py's DATASET_REGISTRY)
+-- CIFAR-10, CIFAR-100, and Downsampled ImageNet (32x32) as of this writing.
 
     python src/train.py --model resnet50  --config src/configs/config_resnet50.yaml  --disable-freeze
     python src/train.py --model resnet50  --config src/configs/config_resnet50.yaml
@@ -11,8 +13,9 @@ import argparse
 import contextlib
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
+from typing import Callable, Dict
 
 import torch
 import torch.nn as nn
@@ -22,7 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.data.dataset import build_dataloaders
+from src.data.dataset import DATASET_REGISTRY, build_dataloaders
 from src.fisher.fisher_core import build_all_chunk_specs, index_param_to_module
 from src.fisher.trainer import FisherAdapTuneTrainer
 from src.fisher.utils import EarlyStopping
@@ -46,9 +49,20 @@ from src.utils.plotting import (
     plot_metric_evolution,
 )
 
-_MODEL_REGISTRY = {
-    "resnet50": (build_resnet50_cifar, RESNET50_CIFAR_LAYERS),
-    "vit_small": (build_vit_small_cifar, VIT_SMALL_LAYERS),
+
+@dataclass(frozen=True)
+class ModelSpec:
+    build: Callable[..., nn.Module]
+    layer_registry: Dict[str, str]
+    display_name: str  # runs/<dataset>/<display_name>/... folder name
+
+
+# Adding a future model: write the builder + layer registry (as today), add one
+# ModelSpec entry here -- nothing else needs to change (mirrors DATASET_REGISTRY
+# in src/data/dataset.py).
+_MODEL_REGISTRY: Dict[str, ModelSpec] = {
+    "resnet50": ModelSpec(build_resnet50_cifar, RESNET50_CIFAR_LAYERS, "ResNet50"),
+    "vit_small": ModelSpec(build_vit_small_cifar, VIT_SMALL_LAYERS, "ViT_Small"),
 }
 
 # Sidebar group order for plot_chunk_drift_heatmap, per model -- 4 groups to
@@ -85,6 +99,7 @@ def _plot_fisher_group_summaries(
         layer_block_values,
         layer_group,
         metrics_dir / "chunk_drift_heatmap.png",
+        num_blocks=trainer.fisher_slice_blocks,
         group_order=_DEPTH_GROUP_ORDER[model_name],
     )
 
@@ -107,11 +122,13 @@ def _plot_fisher_group_summaries(
 
 
 def build_model(name: str, cfg: Dict) -> nn.Module:
-    builder, _ = _MODEL_REGISTRY[name]
+    builder = _MODEL_REGISTRY[name].build
+    dataset_key = cfg.get("dataset", "cifar10")
+    num_classes = cfg.get("num_classes", DATASET_REGISTRY[dataset_key].num_classes)
     if name == "vit_small":
         vit_cfg = cfg.get("vit", {})
         return builder(
-            num_classes=10,
+            num_classes=num_classes,
             patch_size=vit_cfg.get("patch_size", 4),
             embed_dim=vit_cfg.get("embed_dim", 192),
             depth=vit_cfg.get("depth", 6),
@@ -119,7 +136,7 @@ def build_model(name: str, cfg: Dict) -> nn.Module:
             mlp_ratio=vit_cfg.get("mlp_ratio", 4.0),
             drop=vit_cfg.get("drop", 0.1),
         )
-    return builder(num_classes=10)
+    return builder(num_classes=num_classes)
 
 
 def make_train_step(loss_fn, device):
@@ -188,12 +205,21 @@ def run_training(model_name: str, cfg: Dict, disable_freeze: bool = False) -> Di
     # run, instead of relying on someone manually redirecting nohup and
     # renaming the file afterward.
     # run_name is an optional config override (default: model_freeze/nofreeze) --
-    # lets several freeze-config variants of the same model run to distinct,
-    # flat runs/<run_name>/ directories (needed so parallel SLURM jobs don't
-    # collide on the same output_dir mid-training, and so scripts/compare_runs.py's
-    # one-level runs/*/summary.json glob picks all of them up directly).
+    # lets several freeze-config variants of the same model run to distinct
+    # runs/<Dataset>/<Model>/<run_name>/ directories (needed so parallel SLURM
+    # jobs don't collide on the same output_dir mid-training, and so
+    # scripts/compare_runs.py's recursive runs/**/summary.json glob picks all
+    # of them up directly). The dataset/model subfolders keep experiments
+    # across datasets from mixing together as more accumulate.
     default_run_name = f"{model_name}_{'nofreeze' if disable_freeze else 'freeze'}"
-    output_dir = Path(cfg.get("output_dir", ".")) / cfg.get("run_name", default_run_name)
+    dataset_display = DATASET_REGISTRY[cfg.get("dataset", "cifar10")].display_name
+    model_display = _MODEL_REGISTRY[model_name].display_name
+    output_dir = (
+        Path(cfg.get("output_dir", "."))
+        / dataset_display
+        / model_display
+        / cfg.get("run_name", default_run_name)
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "train.log", "w") as log_file, contextlib.redirect_stdout(
         _Tee(sys.stdout, log_file)
@@ -213,7 +239,7 @@ def _run_training(model_name: str, cfg: Dict, disable_freeze: bool, output_dir: 
     train_loader, val_loader, test_loader = build_dataloaders(cfg)
 
     model = build_model(model_name, cfg).to(device)
-    _, layer_registry = _MODEL_REGISTRY[model_name]
+    layer_registry = _MODEL_REGISTRY[model_name].layer_registry
 
     # Fail fast on a registry/naming mismatch instead of producing empty plots later.
     param_to_modinfo = index_param_to_module(model)

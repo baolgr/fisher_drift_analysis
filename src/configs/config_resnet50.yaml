@@ -1,6 +1,8 @@
 # CIFAR-10 benchmark config -- ResNet50 (from scratch, AdamW)
 
 # Data
+dataset: cifar10
+num_classes: 10
 data_root: dataset
 seed: 0
 batch_size: 128

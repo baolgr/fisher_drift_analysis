@@ -1,0 +1,40 @@
+# CIFAR-100 benchmark config -- ResNet50 (from scratch, AdamW)
+#
+# Mirrors config_resnet50.yaml exactly except dataset/num_classes/wandb_project
+# below -- same batch_size and 45k/5k split size (CIFAR-100 has the same 50k/10k
+# train/test shape as CIFAR-10, just 100 classes instead of 10), so
+# steps_per_epoch=351/total_steps=6318 and the freeze_interval=3200 single-cut
+# timing math carries over unchanged. NOT YET RUN -- these Fisher/freeze values
+# are the CIFAR-10-validated starting point (see config_vit_small.yaml's long
+# rationale comment), not verified for CIFAR-100's harder 100-way task; a
+# higher intrinsic loss/gradient-noise floor on 100 classes could plausibly
+# shift the freeze-ranking behavior even though the step-count math still lines
+# up. Re-check runs/CIFAR-100/ResNet50/*/metrics_plots/relative_update.png
+# after a real run, same diagnostic used to validate this on CIFAR-10.
+
+# Data
+dataset: cifar100
+num_classes: 100
+data_root: dataset
+seed: 0
+batch_size: 128
+num_workers: 2
+
+# Training
+num_epochs: 18
+learning_rate: 3.0e-4
+weight_decay: 5.0e-5
+early_stopping_patience: 12
+output_dir: runs
+
+# Fisher / freeze -- copied unchanged from config_resnet50.yaml, see header above.
+fisher_ema_interval: 200
+freeze_interval: 3200
+fisher_slice_mode: row
+fisher_slice_blocks: 4
+js_distance_mode: log
+chunk_selection_metric: total_variation
+js_variance_lambda: -1.0
+
+# W&B (optional, unused by default in this benchmark script)
+wandb_project: FisherAdapTune-CIFAR100

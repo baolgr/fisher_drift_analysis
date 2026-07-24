@@ -63,9 +63,39 @@ All four are independent (no dependency chain) and can run concurrently if your 
 the room. Track them with `sq` (your jobs only) or `squeue`; do **not** poll either in a tight
 loop from a script -- the docs explicitly warn this can degrade the scheduler for everyone.
 Each writes SLURM's own stdout/stderr to `slurm/logs/<jobname>-<jobid>.out`, and `train.py`
-writes its own run to `runs/<model>_<freeze|nofreeze>/` as usual (summary.json, checkpoints/,
+writes its own run to `runs/<Dataset>/<Model>/<freeze|nofreeze>/` as usual (summary.json, checkpoints/,
 metrics_plots/*.png -- now including the 3 new Appendix-B.1-style plots, see
 `docs/2026-07-19_appendix_b1_plots.md`).
+
+## CIFAR-100 / Downsampled ImageNet (32x32) baseline jobs
+
+4 new no-freeze-only jobs, added when CIFAR-100 and Downsampled ImageNet (32x32) support was
+added alongside the existing CIFAR-10 pipeline (`src/data/dataset.py`'s `DATASET_REGISTRY`):
+
+```bash
+sbatch slurm/train_resnet_cifar100_nofreeze.sh
+sbatch slurm/train_vit_cifar100_nofreeze.sh
+sbatch slurm/train_resnet_imagenet32_nofreeze.sh
+sbatch slurm/train_vit_imagenet32_nofreeze.sh
+```
+
+Baselines only, deliberately -- matches how CIFAR-10 itself was validated (no-freeze first, then
+freeze-tuning as a separate follow-up once a baseline confirms the pipeline works end to end on
+the new data). No freeze-enabled or sweep jobs for these two datasets yet.
+
+The two ImageNet32 jobs' configs (`config_{resnet50,vit_small}_imagenet32_cluster.yaml`) are
+flagged unverified in their own header comments -- `num_epochs`/`freeze_interval` are copied
+unchanged from the CIFAR cluster configs and are almost certainly wrong given ImageNet32's ~25x
+larger per-epoch step count (~1.28M train images vs. CIFAR's 45k). Their `--time` budgets are
+correspondingly rough placeholders (24h/20h), not measured. **Do not submit these two as-is
+without first staging the dataset, running a short trial to establish real steps_per_epoch, and
+recomputing `freeze_interval`/`num_epochs`/`--time` against that** -- see each config's and each
+script's own header comment.
+
+`runs/` is now nested `runs/<Dataset>/<Model>/<run_name>/` (was flat `runs/<run_name>/`) so
+results from different datasets don't mix together as more experiments accumulate --
+`scripts/compare_runs.py` was updated to glob recursively (`runs/**/summary.json`) so this works
+regardless of nesting depth.
 
 ## What the scripts request, and why (with sources)
 
@@ -129,7 +159,7 @@ metrics_plots/*.png -- now including the 3 new Appendix-B.1-style plots, see
 
 ## Diagnostic fix jobs for the vit_small_freeze over-freezing issue (2026-07-19)
 
-`runs/vit_small_freeze/` (the cluster-config run already completed, log recovered as
+`runs/CIFAR-10/ViT_Small/vit_small_freeze/` (the cluster-config run already completed, log recovered as
 `slurm/logs/vit_freeze-16724978.out`) froze 90.8% of trainable params instead of the ~51% the
 18-epoch config validated to -- see `docs/2026-07-19_vit_cluster_run_curve_analysis.md` §6 for
 the full diagnosis (root cause: `total_variation`'s cumulative-sum scoring lets small-tensor
@@ -145,7 +175,7 @@ attempts, each changing exactly one Fisher/freeze knob from `config_vit_small_cl
   point on the same sweep, submitted alongside rather than after `_lambda13` to get two data
   points in one round given the 2026-07-21 deadline).
 
-Each writes to its own flat `runs/vit_small_freeze_fix_<name>/` directory via a new `run_name`
+Each writes to its own flat `runs/CIFAR-10/ViT_Small/vit_small_freeze_fix_<name>/` directory via a new `run_name`
 config key (`src/train.py`'s `run_training` now reads `cfg["run_name"]` if present, falling back
 to the old `<model>_<freeze|nofreeze>` naming otherwise -- backward compatible, existing configs
 unaffected). This is what makes it safe to submit all three (and the original four jobs) at the
@@ -157,14 +187,14 @@ sbatch slurm/train_vit_freeze_fix_lambda13.sh
 sbatch slurm/train_vit_freeze_fix_lambda16.sh
 ```
 
-After they finish, compare against `runs/vit_small_freeze/` (the original over-freezing run) and
-`runs/vit_small_nofreeze/` (the accuracy ceiling) with the existing comparison script:
+After they finish, compare against `runs/CIFAR-10/ViT_Small/vit_small_freeze/` (the original over-freezing run) and
+`runs/CIFAR-10/ViT_Small/vit_small_nofreeze/` (the accuracy ceiling) with the existing comparison script:
 
 ```bash
 python scripts/compare_runs.py
 ```
 
-It globs `runs/*/summary.json` directly, so all three fix runs plus the two original runs show
+It globs `runs/**/summary.json` directly, so all three fix runs plus the two original runs show
 up in one table (test accuracy, trainable params, lambda, freeze_interval) without any path
 juggling. Rename whichever run(s) turn out worth keeping to a version-specific name per the
 "After a run" convention below before submitting another job that reuses the same `run_name`.
@@ -173,12 +203,12 @@ juggling. Rename whichever run(s) turn out worth keeping to a version-specific n
 
 New jobs, all cluster-config (40 epochs, `freeze_interval=7200`, seed=0), written after
 `docs/2026-07-19_vit_freeze_tuning_5_experiments_report.md` §7 ("pistes d'amélioration"). Every
-job writes to its own flat `runs/<run_name>/` via a `run_name` config override, so all of them
+job writes to its own flat `runs/<Dataset>/<Model>/<run_name>/` via a `run_name` config override, so all of them
 (plus the 7 already-completed runs) can be submitted together without collision.
 
 **ResNet50 λ/metric sweep (4 jobs)** -- unlike the ViT sweep above (a bug-fix hunt: the baseline
 over-froze 90.9% of params and lost 9.6 accuracy points), the ResNet50 baseline
-(`runs/resnet50_freeze/`) already retains 99.67% of accuracy at 67.2% of params frozen -- no known
+(`runs/CIFAR-10/ResNet50/resnet50_freeze/`) already retains 99.67% of accuracy at 67.2% of params frozen -- no known
 bug. The open question (`docs/2026-07-19_resnet50_cluster_run_curve_analysis.md` §7) is whether
 `lambda=-1.0` is near-optimal or just "not aggressive enough to hurt yet", so this sweep brackets
 the baseline on **both** sides instead of only retreating to a safer value:
@@ -204,7 +234,7 @@ check accuracy-parity-with-lambda16 isn't seed noise -- noted as a good idea in 
 but deliberately deferred past this batch.
 
 After they land, `python scripts/compare_runs.py` picks up every new run directly (globs
-`runs/*/summary.json`), and `python scripts/plot_sweep_summary.py <out.png> <nofreeze_dir>
+`runs/**/summary.json`), and `python scripts/plot_sweep_summary.py <out.png> <nofreeze_dir>
 <freeze_dir> [<freeze_dir> ...]` renders the accuracy-vs-%retained comparison figure used for the
 ViT sweep (`runs/sweep_summaries/vit_lambda_metric_sweep.png`) -- rerun it with the ResNet50 dirs
 once this batch completes for the ResNet50 equivalent.
@@ -221,7 +251,7 @@ configs per model from the 12 already run and re-launches them with `freeze_inte
 4000` (3 events at steps 4000/8000/12000, `num_epochs` unchanged at 40 -- steps_per_epoch=351 for
 both models, confirmed via `build_dataloaders`) instead of a longer schedule, specifically to keep
 wall-clock time unchanged given the 2026-07-21 deadline is the next day. The 2 already-completed
-`nofreeze` baselines (`runs/vit_small_nofreeze/`, `runs/resnet50_nofreeze/`) are reused as-is --
+`nofreeze` baselines (`runs/CIFAR-10/ViT_Small/vit_small_nofreeze/`, `runs/CIFAR-10/ResNet50/resnet50_nofreeze/`) are reused as-is --
 `nofreeze` doesn't depend on `freeze_interval` at all, so no need to re-run them.
 
 ```bash
@@ -255,9 +285,9 @@ The 7 runs completed before 2026-07-19 can't be regenerated in place (no raw his
 persisted, see the "Plotting changes" section below) -- the only way to get the new freeze-step
 marker / accuracy overlay / `history.json` for them is to re-run training. Re-launching the
 **existing, unmodified** scripts below with their original run names (no `run_name` override, no
-new files) will **overwrite** `runs/vit_small_nofreeze/`, `runs/vit_small_freeze/`,
-`runs/vit_small_freeze_fix_lambda13/`, `runs/vit_small_freeze_fix_meanjs/`,
-`runs/resnet50_nofreeze/`, and `runs/resnet50_freeze/` with a fresh run of the identical config
+new files) will **overwrite** `runs/CIFAR-10/ViT_Small/vit_small_nofreeze/`, `runs/CIFAR-10/ViT_Small/vit_small_freeze/`,
+`runs/CIFAR-10/ViT_Small/vit_small_freeze_fix_lambda13/`, `runs/CIFAR-10/ViT_Small/vit_small_freeze_fix_meanjs/`,
+`runs/CIFAR-10/ResNet50/resnet50_nofreeze/`, and `runs/CIFAR-10/ResNet50/resnet50_freeze/` with a fresh run of the identical config
 (same seed=0, so results should reproduce closely, modulo hardware nondeterminism) --
 intentional, not a new naming scheme:
 
@@ -296,7 +326,7 @@ in `src/train.py` for every run (no per-config opt-in needed):
   makes the freeze-shock (report §2) visible directly against the drift curve in the same figure.
 
 Each run also now writes `metrics_plots/history.json` (raw per-step/per-chunk series) so a future
-plotting change can be applied with `python scripts/regenerate_plots.py runs/<run_name>` instead
+plotting change can be applied with `python scripts/regenerate_plots.py runs/<Dataset>/<Model>/<run_name>` instead
 of re-training. **The 7 runs that already exist as of 2026-07-19 predate this** -- their raw
 history was never persisted (only the rendered PNGs), so they cannot be regenerated with the new
 marker/overlay without re-running training; this overnight batch's 6 new jobs are the first runs
@@ -304,9 +334,9 @@ that will have it.
 
 ## After a run
 
-Per CLAUDE.md's "Running training" section: rename `runs/<model>_<freeze|nofreeze>/` to a
+Per CLAUDE.md's "Running training" section: rename `runs/<Dataset>/<Model>/<freeze|nofreeze>/` to a
 version-specific name if it's worth keeping (matching the existing
-`runs/vit_small_freeze_v5_pure_knobs_lambda-1.0/`-style convention) before the next run of the
+`runs/CIFAR-10/ViT_Small/vit_small_freeze_v5_pure_knobs_lambda-1.0/`-style convention) before the next run of the
 same model/freeze-setting overwrites it.
 
 Sources: `docs.alliancecan.ca/wiki/Running_jobs/fr`, `.../wiki/Fir/fr`, `.../wiki/Rorqual/fr`,

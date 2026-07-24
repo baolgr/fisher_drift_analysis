@@ -18,7 +18,7 @@
 # (351 steps) either way, so freeze on/off exercises identical code here --
 # --disable-freeze is just the simpler baseline path.
 #
-# Writes to runs/vit_small_nofreeze/, same path the real
+# Writes to runs/CIFAR-10/ViT_Small/vit_small_nofreeze/, same path the real
 # train_vit_nofreeze.sh job writes to -- the real job's output will
 # overwrite this smoke-test run, so no cleanup needed, but don't mistake
 # this 1-epoch summary.json for a real result if you look before rerunning.
@@ -53,7 +53,7 @@ python src/train.py \
   --num-epochs 1
 
 echo "=== output check ==="
-ls runs/vit_small_nofreeze/metrics_plots/
-python -c "import json; print('test_accuracy:', json.load(open('runs/vit_small_nofreeze/summary.json'))['test_accuracy'])"
+ls runs/CIFAR-10/ViT_Small/vit_small_nofreeze/metrics_plots/
+python -c "import json; print('test_accuracy:', json.load(open('runs/CIFAR-10/ViT_Small/vit_small_nofreeze/summary.json'))['test_accuracy'])"
 
 echo "All checks passed."
